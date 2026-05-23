@@ -13,7 +13,7 @@ const server = http.createServer(app);
 const wss    = new WebSocketServer({ server });
 
 app.use(express.static(path.join(__dirname, 'public')));
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
 // ─── Strukturat kryesore ──────────────────────────────────────
 // rooms[code]      = { code, phase, kerriType, players[], hands{}, activeIdx, log[], leaderboard{} }
