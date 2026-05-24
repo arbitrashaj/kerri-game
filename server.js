@@ -498,17 +498,16 @@ function buildHTML() {
     '}',
     'function openDrawModal(fId,fName,cnt){',
     '  document.getElementById("modal-title").textContent="Dora e "+fName;',
-    '  var indices=[];for(var i=0;i<cnt;i++)indices.push(i);',
-    '  for(var i=indices.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var tmp=indices[i];indices[i]=indices[j];indices[j]=tmp;}',
+    '  var idx=[];for(var i=0;i<cnt;i++)idx.push(i);for(var i=idx.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=idx[i];idx[i]=idx[j];idx[j]=t;}',
     '  var html="";',
-    '  for(var k=0;k<indices.length;k++){',
-    '    html+="<div class=\\\"playing-card drawable-card black-card\\\" onclick=\\\"confirmDraw(\\\'"+escAttr(fId)+"\\\',"+ indices[k] +")\\\"><div class=\\\"rank\\\">\u2660</div><div class=\\\"suit\\\" style=\\\"font-size:11px\\\">"+(k+1)+"</div></div>";',
+    '  for(var k=0;k<idx.length;k++){',
+    '    html+="<div class=\\"playing-card drawable-card black-card\\" onclick=\\"confirmDraw(\'"+escAttr(fId)+"\',"+idx[k]+")\\"><div class=\\"rank\\">\u2660</div><div class=\\"suit\\" style=\\"font-size:11px\\">"+(k+1)+"</div></div>";',
     '  }',
     '  document.getElementById("modal-cards").innerHTML=html;',
     '  document.getElementById("draw-modal").style.display="flex";',
     '}',
+    'function confirmDraw(fId,idx){sendMsg("draw_card",{fromPlayerId:fId,cardIndex:idx});SFX.cardDraw();closeDrawModal();}',
     'function closeDrawModal(){document.getElementById("draw-modal").style.display="none";}',
-    'function confirmDraw(fId,idx){closeDrawModal();sendMsg("draw_card",{fromPlayerId:fId,cardIndex:idx});}',
     'function handleModalOutsideClick(e){if(e.target===document.getElementById("draw-modal"))closeDrawModal();}',
     '',
     'function renderLbRows(lb){',
@@ -668,13 +667,8 @@ function checkGameOver(room){
 function advanceTurn(room){
   const total=room.players.length;
   let s=0;
-  do{
-    room.activeIdx=(room.activeIdx+1)%total;
-    s++;
-  }while(s<total&&(
-    (room.hands[room.players[room.activeIdx].id]||[]).length===0||
-    room.players[room.activeIdx].disconnected
-  ));
+  do{room.activeIdx=(room.activeIdx+1)%total;s++;}
+  while(s<total&&((room.hands[room.players[room.activeIdx].id]||[]).length===0||room.players[room.activeIdx].disconnected));
   if(s>=total){checkGameOver(room);return;}
   sendGameState(room);
 }
@@ -724,7 +718,9 @@ io.on('connection',socket=>{
     if(cardIndex<0||cardIndex>=fh.length)return;
     const card=fh.splice(cardIndex,1)[0];room.hands[playerId].push(card);
     room.log.unshift(ap.name+' mori "'+(card.isKerri?'★ KERRI':card.rank+card.suit)+'" nga '+fp.name);
-    autoRemovePairs(room.hands[playerId]);if(checkGameOver(room))return;advanceTurn(room);
+    autoRemovePairs(room.hands[playerId]);
+    if(checkGameOver(room))return;
+    advanceTurn(room);
   });
   socket.on('chat',({text})=>{
     const sess=sessions[playerId],room=rooms[sess?sess.roomCode:null];if(!room)return;
