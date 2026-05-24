@@ -8,7 +8,17 @@ const http     = require('http');
 
 const app    = express();
 const server = http.createServer(app);
-const wss    = new WebSocketServer({ server });
+const wss    = new WebSocketServer({ 
+  server,
+  perMessageDeflate: false
+});
+
+// Render.com requires explicit upgrade handling
+server.on('upgrade', (request, socket, head) => {
+  wss.handleUpgrade(request, socket, head, (ws) => {
+    wss.emit('connection', ws, request);
+  });
+});
 const PORT   = process.env.PORT || 3000;
 
 // ── Serve single HTML file inline ─────────────────────────
@@ -420,7 +430,7 @@ button, input { touch-action: manipulation; }
 </div>
 
 <!-- ═══════════════════════════════════ HOME ════════════════ -->
-<div id="phase-home" class="phase active">
+<div id="phase-home" class="phase">
   <div class="home-wrap">
     <div class="home-logo">♠</div>
     <h1>Kujt i ngec Kerri</h1>
@@ -671,30 +681,28 @@ let loadInterval = null;
 
 function startLoading() {
   loadPct = 0;
-  const fill = document.getElementById('loading-fill');
-  const hint = document.getElementById('loading-hint');
-  if (!fill || !hint) return;
-  fill.style.width = '0%';
-  hint.textContent = LOADING_HINTS[0];
+  let hintIdx = 0;
+  document.getElementById('loading-fill').style.width = '0%';
+  document.getElementById('loading-hint').textContent = LOADING_HINTS[0];
+
   loadInterval = setInterval(() => {
     loadPct += Math.random() * 14 + 4;
     if (loadPct > 95) loadPct = 95;
-    fill.style.width = loadPct + '%';
-    const hintIdx = Math.min(Math.floor(loadPct / 22), LOADING_HINTS.length - 1);
-    hint.textContent = LOADING_HINTS[hintIdx];
+    document.getElementById('loading-fill').style.width = loadPct + '%';
+    hintIdx = Math.min(Math.floor(loadPct / 22), LOADING_HINTS.length - 1);
+    document.getElementById('loading-hint').textContent = LOADING_HINTS[hintIdx];
   }, 180);
 }
 
 function finishLoading() {
   clearInterval(loadInterval);
-  const fill = document.getElementById('loading-fill');
-  const hint = document.getElementById('loading-hint');
-  const ls   = document.getElementById('loading-screen');
-  if (!ls) return;
-  if (fill) fill.style.width = '100%';
-  if (hint) hint.textContent = 'Gati!';
-  ls.classList.add('fade-out');
-  setTimeout(() => { ls.style.display = 'none'; }, 600);
+  document.getElementById('loading-fill').style.width = '100%';
+  document.getElementById('loading-hint').textContent = 'Gati!';
+  setTimeout(() => {
+    const ls = document.getElementById('loading-screen');
+    ls.classList.add('fade-out');
+    setTimeout(() => ls.style.display = 'none', 500);
+  }, 300);
 }
 
 // ─── Username persistence ─────────────────────────────────────
@@ -878,20 +886,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Try reconnect on load (only if session exists)
-  try {
-    const sess = getSavedSession();
-    if (sess && sess.myId && sess.roomCode) {
-      myId     = sess.myId;
-      myName   = sess.myName || '';
-      isHost   = sess.isHost || false;
-      roomCode = sess.roomCode;
-      setTimeout(() => {
-        showBanner();
-        connect(() => sendMsg({ type: 'reconnect', playerId: sess.myId, roomCode: sess.roomCode }));
-      }, 2200);
-    }
-  } catch(e) { clearSession(); }
+  // Try reconnect on load
+  const sess = getSavedSession();
+  if (sess?.myId && sess?.roomCode) {
+    myId     = sess.myId;
+    myName   = sess.myName;
+    isHost   = sess.isHost;
+    roomCode = sess.roomCode;
+    setTimeout(() => {
+      showBanner();
+      connect(() => sendMsg({ type: 'reconnect', playerId: sess.myId, roomCode: sess.roomCode }));
+    }, 2000); // after loading screen
+  }
 });
 
 // ─── Lobby ────────────────────────────────────────────────────
