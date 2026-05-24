@@ -508,6 +508,7 @@ function buildHTML() {
     '  document.getElementById("draw-modal").style.display="flex";',
     '}',
     'function closeDrawModal(){document.getElementById("draw-modal").style.display="none";}',
+    'function confirmDraw(fId,idx){closeDrawModal();sendMsg("draw_card",{fromPlayerId:fId,cardIndex:idx});}',
     'function handleModalOutsideClick(e){if(e.target===document.getElementById("draw-modal"))closeDrawModal();}',
     '',
     'function renderLbRows(lb){',
