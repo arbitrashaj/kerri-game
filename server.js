@@ -288,6 +288,7 @@ function buildHTML() {
     '        <button class="btn-send" onclick="sendChat()">\u27a4</button>',
     '      </div>',
     '    </div>',
+    '    <button class="btn btn-secondary" onclick="leaveGame()" style="margin-top:.5rem;opacity:.7">Dil nga loja</button>',
     '  </div>',
     '</div>',
     '',
@@ -463,7 +464,7 @@ function buildHTML() {
     '  if(state.opponents){for(var i=0;i<state.opponents.length;i++){if(state.opponents[i].id===state.drawFromId){df=state.opponents[i];break;}}}',
     '  if(!state.myHand||state.myHand.length===0){m.className="msg-box success";m.textContent="\u2705 Bravo! Ke dal\u00ebt!";}',
     '  else if(state.isMyTurn&&df){m.className="msg-box";m.textContent="\U0001f3af Radha jote! Kliko kartolat e \\""+df.name+"\\".";}',
-    '  else if(state.isMyTurn){m.className="msg-box warn";m.textContent="\u23f3 Duke pritur lojtar\u00ebt e tjer\u00eb...";}',
+    '  else if(state.isMyTurn){m.className="msg-box success";m.textContent="\u2705 Prit radhën.";}',
     '  else{var a=null;if(state.players){for(var i=0;i<state.players.length;i++){if(state.players[i].id===state.activePlayerId){a=state.players[i];break;}}}m.className="msg-box warn";m.textContent="\u23f3 "+(a?a.name:"\u2014")+" po luan...";}',
     '}',
     'function renderOpponents(state){',
@@ -497,14 +498,15 @@ function buildHTML() {
     '}',
     'function openDrawModal(fId,fName,cnt){',
     '  document.getElementById("modal-title").textContent="Dora e "+fName;',
+    '  var indices=[];for(var i=0;i<cnt;i++)indices.push(i);',
+    '  for(var i=indices.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var tmp=indices[i];indices[i]=indices[j];indices[j]=tmp;}',
     '  var html="";',
-    '  for(var i=0;i<cnt;i++){',
-    '    html+="<div class=\\"playing-card drawable-card black-card\\" onclick=\\"confirmDraw(\'"+escAttr(fId)+"\',"+i+")\\"><div class=\\"rank\\">\u2660</div><div class=\\"suit\\" style=\\"font-size:11px\\">"+(i+1)+"</div></div>";',
+    '  for(var k=0;k<indices.length;k++){',
+    '    html+="<div class=\\\"playing-card drawable-card black-card\\\" onclick=\\\"confirmDraw(\\\'"+escAttr(fId)+"\\\',"+ indices[k] +")\\\"><div class=\\\"rank\\\">\u2660</div><div class=\\\"suit\\\" style=\\\"font-size:11px\\\">"+(k+1)+"</div></div>";',
     '  }',
     '  document.getElementById("modal-cards").innerHTML=html;',
     '  document.getElementById("draw-modal").style.display="flex";',
     '}',
-    'function confirmDraw(fId,idx){sendMsg("draw_card",{fromPlayerId:fId,cardIndex:idx});SFX.cardDraw();closeDrawModal();}',
     'function closeDrawModal(){document.getElementById("draw-modal").style.display="none";}',
     'function handleModalOutsideClick(e){if(e.target===document.getElementById("draw-modal"))closeDrawModal();}',
     '',
@@ -545,13 +547,11 @@ function buildHTML() {
     '  else{document.getElementById("go-host-btns").style.display="none";document.getElementById("go-wait-btns").style.display="block";}',
     '}',
     'function playAgain(){sendMsg("start_game");}',
-    'function leaveGame(){clearSession();try{if(socket){socket.off();socket.disconnect();}}catch(e){}setTimeout(function(){location.href=location.origin+location.pathname;},100);}',
+    'function leaveGame(){clearSession();try{if(socket){socket.off();socket.disconnect();}}catch(e){}setTimeout(function(){location.href=location.origin+location.pathname;},150);}',
     '',
     'function sendChat(){',
     '  var inp=document.getElementById("chat-input"),text=inp.value.trim();',
-    '  if(!text)return;',
-    '  if(!socket||!socket.connected){appendChat({text:"Lidhja u nderpre. Po riprovon...",system:true});return;}',
-    '  sendMsg("chat",{text:text});inp.value="";',
+    '  if(!text)return;sendMsg("chat",{text:text});inp.value="";',
     '}',
     'function appendChat(msg){',
     '  var area=document.getElementById("chat-messages");if(!area)return;',
@@ -674,7 +674,6 @@ function advanceTurn(room){
     (room.hands[room.players[room.activeIdx].id]||[]).length===0||
     room.players[room.activeIdx].disconnected
   ));
-  // If we looped all the way around and found no valid player, check game over
   if(s>=total){checkGameOver(room);return;}
   sendGameState(room);
 }
@@ -724,9 +723,7 @@ io.on('connection',socket=>{
     if(cardIndex<0||cardIndex>=fh.length)return;
     const card=fh.splice(cardIndex,1)[0];room.hands[playerId].push(card);
     room.log.unshift(ap.name+' mori "'+(card.isKerri?'★ KERRI':card.rank+card.suit)+'" nga '+fp.name);
-    autoRemovePairs(room.hands[playerId]);
-    if(checkGameOver(room))return;
-    advanceTurn(room);
+    autoRemovePairs(room.hands[playerId]);if(checkGameOver(room))return;advanceTurn(room);
   });
   socket.on('chat',({text})=>{
     const sess=sessions[playerId],room=rooms[sess?sess.roomCode:null];if(!room)return;
