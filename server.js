@@ -23,7 +23,7 @@ const HTML = `<!DOCTYPE html>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
   <meta name="theme-color" content="#1a1a1a"/>
   <title>Kujt i ngec Kerri ♠</title>
-  <script src="/socket.io/socket.io.js"></script>
+  <script src="/socket.io/socket.io.js"></scr` + `ipt>
   <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -337,55 +337,56 @@ const RED_SUITS=new Set(['\u2665','\u2666']);
 const AudioCtx=window.AudioContext||window.webkitAudioContext;
 let audioCtx=null;
 function getAC(){if(!audioCtx)audioCtx=new AudioCtx();return audioCtx;}
-function playTone(freq,type,dur,vol=0.15,delay=0){
-  try{const ctx=getAC(),osc=ctx.createOscillator(),g=ctx.createGain();
+function playTone(freq,type,dur,vol,delay){
+  vol=vol||0.15;delay=delay||0;
+  try{var ctx=getAC(),osc=ctx.createOscillator(),g=ctx.createGain();
   osc.connect(g);g.connect(ctx.destination);osc.type=type;
   osc.frequency.setValueAtTime(freq,ctx.currentTime+delay);
   g.gain.setValueAtTime(vol,ctx.currentTime+delay);
   g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+delay+dur);
   osc.start(ctx.currentTime+delay);osc.stop(ctx.currentTime+delay+dur+.05);}catch(e){}}
-const SFX={
-  cardDraw:()=>{playTone(440,'sine',.08,.15);playTone(520,'sine',.06,.10,.05);},
-  myTurn:()=>{playTone(660,'sine',.12,.20);playTone(880,'sine',.10,.15,.08);},
-  win:()=>{[523,659,784,1047].forEach((f,i)=>playTone(f,'sine',.2,.18,i*.1));},
-  lose:()=>{[300,250,200].forEach((f,i)=>playTone(f,'sawtooth',.25,.18,i*.12));},
-  chat:()=>{playTone(880,'sine',.07,.08);},
-  join:()=>{playTone(600,'sine',.10,.12);playTone(750,'sine',.08,.10,.07);},
-  error:()=>{playTone(300,'square',.15,.15);},
+var SFX={
+  cardDraw:function(){playTone(440,'sine',.08,.15);playTone(520,'sine',.06,.10,.05);},
+  myTurn:function(){playTone(660,'sine',.12,.20);playTone(880,'sine',.10,.15,.08);},
+  win:function(){[523,659,784,1047].forEach(function(f,i){playTone(f,'sine',.2,.18,i*.1);});},
+  lose:function(){[300,250,200].forEach(function(f,i){playTone(f,'sawtooth',.25,.18,i*.12);});},
+  chat:function(){playTone(880,'sine',.07,.08);},
+  join:function(){playTone(600,'sine',.10,.12);playTone(750,'sine',.08,.10,.07);},
+  error:function(){playTone(300,'square',.15,.15);},
 };
 
 // ── Username ───────────────────────────────────────────────
-function loadSavedUsername(){const s=localStorage.getItem('kerri_username');if(s){document.getElementById('home-name').value=s;updateAvatar(s);}}
+function loadSavedUsername(){var s=localStorage.getItem('kerri_username');if(s){document.getElementById('home-name').value=s;updateAvatar(s);}}
 function saveUsername(n){localStorage.setItem('kerri_username',n);updateAvatar(n);}
-function updateAvatar(n){const a=document.getElementById('home-avatar');if(a&&n)a.textContent=n.charAt(0).toUpperCase();}
+function updateAvatar(n){var a=document.getElementById('home-avatar');if(a&&n)a.textContent=n.charAt(0).toUpperCase();}
 
 // ── Session ────────────────────────────────────────────────
-function saveSession(){if(myId&&roomCode)localStorage.setItem('kerri_session',JSON.stringify({myId,roomCode,myName,isHost}));}
+function saveSession(){if(myId&&roomCode)localStorage.setItem('kerri_session',JSON.stringify({myId:myId,roomCode:roomCode,myName:myName,isHost:isHost}));}
 function clearSession(){localStorage.removeItem('kerri_session');}
-function getSavedSession(){try{return JSON.parse(localStorage.getItem('kerri_session'));}catch{return null;}}
+function getSavedSession(){try{return JSON.parse(localStorage.getItem('kerri_session'));}catch(e){return null;}}
 
 // ── Socket.io connect ──────────────────────────────────────
 function connectSocket(cb){
   if(socket&&socket.connected){cb();return;}
   socket=io({transports:['websocket','polling']});
   socket.on('connect',cb);
-  socket.on('disconnect',()=>{document.getElementById('reconnect-banner').style.display='flex';});
-  socket.on('reconnect',()=>{
+  socket.on('disconnect',function(){document.getElementById('reconnect-banner').style.display='flex';});
+  socket.on('reconnect',function(){
     document.getElementById('reconnect-banner').style.display='none';
-    const sess=getSavedSession();
+    var sess=getSavedSession();
     if(sess)socket.emit('reconnect_session',{playerId:sess.myId,roomCode:sess.roomCode});
   });
   socket.on('joined',handleJoined);
   socket.on('reconnected',handleJoined);
-  socket.on('reconnect_failed',()=>{clearSession();showPhase('home');});
+  socket.on('reconnect_failed',function(){clearSession();showPhase('home');});
   socket.on('lobby_state',renderLobby);
   socket.on('game_state',renderGame);
   socket.on('game_over',renderGameOver);
-  socket.on('chat',msg=>{appendChat(msg);if(!msg.system)SFX.chat();});
-  socket.on('kicked',()=>{clearSession();showPhase('home');showError('home-error','U hoqe nga dhoma.');});
-  socket.on('error_msg',msg=>{showError('home-error',msg.message);showError('create-error',msg.message);SFX.error();});
+  socket.on('chat',function(msg){appendChat(msg);if(!msg.system)SFX.chat();});
+  socket.on('kicked',function(){clearSession();showPhase('home');showError('home-error','U hoqe nga dhoma.');});
+  socket.on('error_msg',function(msg){showError('home-error',msg.message);showError('create-error',msg.message);SFX.error();});
 }
-function sendMsg(type,data={}){if(socket)socket.emit(type,data);}
+function sendMsg(type,data){if(socket)socket.emit(type,data||{});}
 
 function handleJoined(msg){
   myId=msg.playerId;isHost=msg.isHost;roomCode=msg.roomCode;
@@ -395,21 +396,22 @@ function handleJoined(msg){
 
 // ── Home ───────────────────────────────────────────────────
 function goCreate(){
-  const name=document.getElementById('home-name').value.trim();
+  var name=document.getElementById('home-name').value.trim();
   if(!name){showError('home-error','Shkruaj emrin tënd!');SFX.error();return;}
   myName=name;saveUsername(name);hideError('home-error');showPhase('create');
 }
 function goJoin(){
-  const name=document.getElementById('home-name').value.trim();
-  const code=document.getElementById('home-code').value.trim().toUpperCase();
+  var name=document.getElementById('home-name').value.trim();
+  var code=document.getElementById('home-code').value.trim().toUpperCase();
   if(!name){showError('home-error','Shkruaj emrin tënd!');SFX.error();return;}
   if(code.length!==4){showError('home-error','Kodi duhet 4 karaktere!');SFX.error();return;}
   myName=name;saveUsername(name);hideError('home-error');
-  connectSocket(()=>sendMsg('join_room',{name:myName,roomCode:code}));
+  connectSocket(function(){sendMsg('join_room',{name:myName,roomCode:code});});
 }
 function createRoom(){
-  const kerriType=document.querySelector('input[name="kerri"]:checked')?.value||'joker';
-  connectSocket(()=>sendMsg('create_room',{name:myName,kerriType}));
+  var kerriType=document.querySelector('input[name="kerri"]:checked');
+  kerriType=kerriType?kerriType.value:'joker';
+  connectSocket(function(){sendMsg('create_room',{name:myName,kerriType:kerriType});});
 }
 
 // ── Lobby ──────────────────────────────────────────────────
@@ -417,85 +419,90 @@ function renderLobby(msg){
   showPhase('lobby');
   document.getElementById('lobby-code').textContent=msg.roomCode;
   document.getElementById('lobby-count').textContent=msg.players.length;
-  document.getElementById('lobby-players').innerHTML=msg.players.map(p=>{
-    const isMe=p.id===myId;
-    const kick=isHost&&!p.isHost&&!isMe?`<button class="kick-btn" onclick="kickPlayer('${p.id}')">Hiq</button>`:'';
-    return `<div class="lobby-player-row">
-      <div class="player-dot ${p.disconnected?'offline':''}"></div>
-      <div class="player-name-col">${escHtml(p.name)}${isMe?' <span style="color:var(--hint);font-size:11px">(ti)</span>':''}</div>
-      ${p.isHost?'<span class="host-badge">Host</span>':''}${kick}
-    </div>`;
+  document.getElementById('lobby-players').innerHTML=msg.players.map(function(p){
+    var isMe=p.id===myId;
+    var kick=isHost&&!p.isHost&&!isMe
+      ? '<button class="kick-btn" onclick="kickPlayer(\''+escAttr(p.id)+'\')">Hiq</button>'
+      : '';
+    var meLabel=isMe?' <span style="color:var(--hint);font-size:11px">(ti)</span>':'';
+    var hostBadge=p.isHost?'<span class="host-badge">Host</span>':'';
+    var dot='<div class="player-dot '+(p.disconnected?'offline':'')+'"></div>';
+    return '<div class="lobby-player-row">'+dot+'<div class="player-name-col">'+escHtml(p.name)+meLabel+'</div>'+hostBadge+kick+'</div>';
   }).join('');
   if(msg.leaderboard&&msg.leaderboard.length>0){
     document.getElementById('lobby-lb-wrap').style.display='block';
     document.getElementById('lobby-leaderboard').innerHTML=renderLbRows(msg.leaderboard);
   }
-  const ha=document.getElementById('lobby-host-area'),wa=document.getElementById('lobby-wait-area');
+  var ha=document.getElementById('lobby-host-area'),wa=document.getElementById('lobby-wait-area');
   if(isHost){ha.style.display='block';wa.style.display='none';document.getElementById('start-btn').disabled=msg.players.length<2;}
   else{ha.style.display='none';wa.style.display='block';}
 }
 function startGame(){sendMsg('start_game');}
 function kickPlayer(id){sendMsg('kick_player',{targetId:id});}
 function copyCode(){
-  navigator.clipboard.writeText(document.getElementById('lobby-code').textContent).then(()=>{
-    const b=document.getElementById('copy-btn');b.innerHTML='✓ Kopjuar!';
-    setTimeout(()=>b.innerHTML='⧉ Kopjo',2000);
+  navigator.clipboard.writeText(document.getElementById('lobby-code').textContent).then(function(){
+    var b=document.getElementById('copy-btn');b.innerHTML='✓ Kopjuar!';
+    setTimeout(function(){b.innerHTML='⧉ Kopjo';},2000);
   });
 }
 
 // ── Game ───────────────────────────────────────────────────
-let prevMyTurn=false;
+var prevMyTurn=false;
 function renderGame(state){
   showPhase('game');
-  const ap=state.players.find(p=>p.id===state.activePlayerId);
-  const isMT=state.isMyTurn;
+  var ap=state.players.find(function(p){return p.id===state.activePlayerId;});
+  var isMT=state.isMyTurn;
   if(isMT&&!prevMyTurn)SFX.myTurn();
   prevMyTurn=isMT;
-  const tc=document.getElementById('chip-turn');
-  tc.textContent=isMT?'🎯 Radha jote!':`Radha e: ${ap?.name||'—'}`;
+  var tc=document.getElementById('chip-turn');
+  tc.textContent=isMT?'🎯 Radha jote!':'Radha e: '+(ap?ap.name:'—');
   tc.className='chip'+(isMT?' my-turn':'');
   document.getElementById('chip-room').textContent='♠ '+state.roomCode;
   renderMsg(state);renderOpponents(state);renderMyHand(state.myHand);
-  document.getElementById('game-log').innerHTML=(state.log||[]).map(l=>`<div class="log-item">${escHtml(l)}</div>`).join('');
+  document.getElementById('game-log').innerHTML=(state.log||[]).map(function(l){return '<div class="log-item">'+escHtml(l)+'</div>';}).join('');
   if(document.getElementById('lb-panel').style.display!=='none')renderLbPanel(state.leaderboard);
 }
 function renderMsg(state){
-  const m=document.getElementById('game-msg');
-  const df=state.opponents?.find(o=>o.id===state.drawFromId);
+  var m=document.getElementById('game-msg');
+  var df=state.opponents&&state.opponents.find(function(o){return o.id===state.drawFromId;});
   if(!state.myHand||state.myHand.length===0){m.className='msg-box success';m.textContent='✅ Bravo! Ke dalë!';}
   else if(state.isMyTurn&&df){m.className='msg-box';m.textContent='🎯 Radha jote! Kliko kartolat e "'+df.name+'".';}
   else if(state.isMyTurn){m.className='msg-box success';m.textContent='✅ Prit radhën.';}
-  else{const a=state.players?.find(p=>p.id===state.activePlayerId);m.className='msg-box warn';m.textContent='⏳ '+(a?.name||'—')+' po luan...';}
+  else{var a=state.players&&state.players.find(function(p){return p.id===state.activePlayerId;});m.className='msg-box warn';m.textContent='⏳ '+(a?a.name:'—')+' po luan...';}
 }
 function renderOpponents(state){
-  const area=document.getElementById('opponents-area');area.innerHTML='';
-  state.opponents.forEach(opp=>{
-    const iD=state.isMyTurn&&opp.id===state.drawFromId&&opp.cardCount>0;
-    const row=document.createElement('div');row.className='opp-row';
-    const cards=Array.from({length:opp.cardCount},(_,i)=>{
-      const cls=['card-back',opp.disconnected?'disc':iD?'drawable':'not-my-turn'];
-      const clk=iD?`onclick="openDrawModal('${opp.id}','${escAttr(opp.name)}',${opp.cardCount})"`:'' ;
-      return `<div class="${cls.join(' ')}" ${clk}>♠</div>`;
+  var area=document.getElementById('opponents-area');area.innerHTML='';
+  state.opponents.forEach(function(opp){
+    var iD=state.isMyTurn&&opp.id===state.drawFromId&&opp.cardCount>0;
+    var row=document.createElement('div');row.className='opp-row';
+    var cards=Array.from({length:opp.cardCount},function(_,i){
+      var cls='card-back '+(opp.disconnected?'disc':iD?'drawable':'not-my-turn');
+      var clk=iD?' onclick="openDrawModal(\''+escAttr(opp.id)+'\',\''+escAttr(opp.name)+'\','+opp.cardCount+')"':'';
+      return '<div class="'+cls+'"'+clk+'>♠</div>';
     }).join('');
-    row.innerHTML=`<div class="opp-info"><div class="opp-name">${escHtml(opp.name)}${opp.disconnected?'<span class="disc-tag">shkëputur</span>':''}${opp.isOut?'<span class="badge badge-out">✓</span>':''}</div><div class="opp-meta">${opp.cardCount} letra</div></div><div class="opp-cards">${cards}</div>`;
+    var discTag=opp.disconnected?'<span class="disc-tag">shkëputur</span>':'';
+    var outBadge=opp.isOut?'<span class="badge badge-out">✓</span>':'';
+    row.innerHTML='<div class="opp-info"><div class="opp-name">'+escHtml(opp.name)+discTag+outBadge+'</div><div class="opp-meta">'+opp.cardCount+' letra</div></div><div class="opp-cards">'+cards+'</div>';
     area.appendChild(row);
   });
 }
 function renderMyHand(hand){
-  const c=document.getElementById('my-hand'),cnt=document.getElementById('my-hand-count');
+  var c=document.getElementById('my-hand'),cnt=document.getElementById('my-hand-count');
   if(!hand||hand.length===0){c.innerHTML='<span style="font-size:14px;color:#999">Ke dalë ✓</span>';if(cnt)cnt.textContent='';return;}
   if(cnt)cnt.textContent=hand.length;
-  c.innerHTML=hand.map(card=>{
-    let cls='playing-card';
+  c.innerHTML=hand.map(function(card){
+    var cls='playing-card';
     if(card.isKerri)cls+=' kerri-card';
     else if(RED_SUITS.has(card.suit))cls+=' red-card';
     else cls+=' black-card';
-    return `<div class="${cls}"><div class="rank">${card.rank}</div><div class="suit">${card.suit}</div></div>`;
+    return '<div class="'+cls+'"><div class="rank">'+card.rank+'</div><div class="suit">'+card.suit+'</div></div>';
   }).join('');
 }
 function openDrawModal(fId,fName,cnt){
   document.getElementById('modal-title').textContent='Dora e '+fName;
-  document.getElementById('modal-cards').innerHTML=Array.from({length:cnt},(_,i)=>`<div class="playing-card drawable-card black-card" onclick="confirmDraw('${fId}',${i})"><div class="rank">♠</div><div class="suit" style="font-size:11px">${i+1}</div></div>`).join('');
+  document.getElementById('modal-cards').innerHTML=Array.from({length:cnt},function(_,i){
+    return '<div class="playing-card drawable-card black-card" onclick="confirmDraw(\''+escAttr(fId)+'\','+i+')"><div class="rank">♠</div><div class="suit" style="font-size:11px">'+(i+1)+'</div></div>';
+  }).join('');
   document.getElementById('draw-modal').style.display='flex';
 }
 function confirmDraw(fId,idx){sendMsg('draw_card',{fromPlayerId:fId,cardIndex:idx});SFX.cardDraw();closeDrawModal();}
@@ -505,11 +512,14 @@ function handleModalOutsideClick(e){if(e.target===document.getElementById('draw-
 // ── Leaderboard ────────────────────────────────────────────
 function renderLbRows(lb){
   if(!lb||lb.length===0)return '<div style="font-size:13px;color:var(--hint)">Ende nuk ka lojëra.</div>';
-  const m=['gold','silver','bronze'];
-  return lb.map((p,i)=>`<div class="lb-row"><div class="lb-rank ${m[i]||''}">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</div><div class="lb-name">${escHtml(p.name)}</div><div class="lb-stats"><span class="lb-win">${p.wins}W</span><span class="lb-loss">${p.losses}L</span></div></div>`).join('');
+  var m=['gold','silver','bronze'];
+  return lb.map(function(p,i){
+    var rank=i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
+    return '<div class="lb-row"><div class="lb-rank '+(m[i]||'')+'">'+rank+'</div><div class="lb-name">'+escHtml(p.name)+'</div><div class="lb-stats"><span class="lb-win">'+p.wins+'W</span><span class="lb-loss">'+p.losses+'L</span></div></div>';
+  }).join('');
 }
 function toggleLeaderboard(){
-  const p=document.getElementById('lb-panel'),open=p.style.display==='none';
+  var p=document.getElementById('lb-panel'),open=p.style.display==='none';
   p.style.display=open?'block':'none';
   document.getElementById('lb-toggle-btn').textContent=open?'✕':'🏆';
 }
@@ -518,19 +528,19 @@ function renderLbPanel(lb){document.getElementById('lb-content').innerHTML=rende
 // ── Game Over ──────────────────────────────────────────────
 function renderGameOver(msg){
   showPhase('gameover');
-  const isMe=msg.loserId===myId;
+  var isMe=msg.loserId===myId;
   document.getElementById('go-emoji').textContent=isMe?'😱':'🎉';
   document.getElementById('go-loser').textContent=msg.loserName;
   document.getElementById('go-sub').textContent=isMe?'Ty të ngeci Kerri!':'Atij/Asaj i ngeci Kerri!';
   if(isMe)SFX.lose();else SFX.win();
-  document.getElementById('go-results').innerHTML=msg.results.map(r=>{
-    let bc,bt;
+  document.getElementById('go-results').innerHTML=msg.results.map(function(r){
+    var bc,bt;
     if(r.hasKerri){bc='badge-kerri';bt='★ Kerri';}
     else if(r.cardCount===0){bc='badge-out';bt='✓ Doli';}
     else{bc='badge-safe';bt=r.cardCount+' letra';}
-    return `<div class="result-row"><span>${escHtml(r.name)}</span><span class="badge ${bc}">${bt}</span></div>`;
+    return '<div class="result-row"><span>'+escHtml(r.name)+'</span><span class="badge '+bc+'">'+bt+'</span></div>';
   }).join('');
-  const lbc=document.getElementById('go-lb-card');
+  var lbc=document.getElementById('go-lb-card');
   if(msg.leaderboard&&msg.leaderboard.length>0){lbc.style.display='block';document.getElementById('go-leaderboard').innerHTML=renderLbRows(msg.leaderboard);}
   else lbc.style.display='none';
   if(isHost){document.getElementById('go-host-btns').style.display='block';document.getElementById('go-wait-btns').style.display='none';}
@@ -541,12 +551,12 @@ function leaveGame(){clearSession();if(socket)socket.disconnect();location.reloa
 
 // ── Chat ───────────────────────────────────────────────────
 function sendChat(){
-  const inp=document.getElementById('chat-input'),text=inp.value.trim();
-  if(!text)return;sendMsg('chat',{text});inp.value='';
+  var inp=document.getElementById('chat-input'),text=inp.value.trim();
+  if(!text)return;sendMsg('chat',{text:text});inp.value='';
 }
 function appendChat(msg){
-  const area=document.getElementById('chat-messages');if(!area)return;
-  const div=document.createElement('div');
+  var area=document.getElementById('chat-messages');if(!area)return;
+  var div=document.createElement('div');
   if(msg.system){div.className='chat-msg system';div.textContent=msg.text;}
   else{div.className='chat-msg';div.innerHTML='<span class="chat-sender">'+escHtml(msg.sender)+':</span> '+escHtml(msg.text);}
   area.appendChild(div);area.scrollTop=area.scrollHeight;
@@ -554,36 +564,36 @@ function appendChat(msg){
 
 // ── Utils ──────────────────────────────────────────────────
 function showPhase(id){
-  document.querySelectorAll('.phase').forEach(p=>p.classList.remove('active'));
-  const el=document.getElementById('phase-'+id);if(el)el.classList.add('active');
+  document.querySelectorAll('.phase').forEach(function(p){p.classList.remove('active');});
+  var el=document.getElementById('phase-'+id);if(el)el.classList.add('active');
   window.scrollTo({top:0,behavior:'smooth'});
 }
-function showError(id,msg){const el=document.getElementById(id);if(!el)return;el.textContent=msg;el.style.display='block';}
-function hideError(id){const el=document.getElementById(id);if(el)el.style.display='none';}
+function showError(id,msg){var el=document.getElementById(id);if(!el)return;el.textContent=msg;el.style.display='block';}
+function hideError(id){var el=document.getElementById(id);if(el)el.style.display='none';}
 function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function escAttr(s){return String(s).replace(/'/g,'&#39;').replace(/"/g,'&quot;');}
 
 // ── Init ───────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded',()=>{
+document.addEventListener('DOMContentLoaded',function(){
   loadSavedUsername();
-  const ni=document.getElementById('home-name');
-  if(ni)ni.addEventListener('input',e=>updateAvatar(e.target.value));
-  document.querySelectorAll('.kerri-opt').forEach(opt=>{
-    opt.addEventListener('click',()=>{
-      document.querySelectorAll('.kerri-opt').forEach(o=>o.classList.remove('selected'));
+  var ni=document.getElementById('home-name');
+  if(ni)ni.addEventListener('input',function(e){updateAvatar(e.target.value);});
+  document.querySelectorAll('.kerri-opt').forEach(function(opt){
+    opt.addEventListener('click',function(){
+      document.querySelectorAll('.kerri-opt').forEach(function(o){o.classList.remove('selected');});
       opt.classList.add('selected');opt.querySelector('input').checked=true;
     });
   });
   try{
-    const sess=getSavedSession();
+    var sess=getSavedSession();
     if(sess&&sess.myId&&sess.roomCode){
       myId=sess.myId;myName=sess.myName||'';isHost=sess.isHost||false;roomCode=sess.roomCode;
       document.getElementById('reconnect-banner').style.display='flex';
-      connectSocket(()=>sendMsg('reconnect_session',{playerId:sess.myId,roomCode:sess.roomCode}));
+      connectSocket(function(){sendMsg('reconnect_session',{playerId:sess.myId,roomCode:sess.roomCode});});
     }
   }catch(e){clearSession();}
 });
-</script>
+</scr` + `ipt>
 </body>
 </html>`;
 
@@ -643,18 +653,18 @@ function checkGameOver(room){
   const alive=room.players.filter(p=>room.hands[p.id]&&room.hands[p.id].length>0);
   if(alive.length>1)return false;
   room.phase='gameover';let loserId=null;
-  room.players.forEach(p=>{if(room.hands[p.id]?.some(c=>c.isKerri))loserId=p.id;});
+  room.players.forEach(p=>{if(room.hands[p.id]&&room.hands[p.id].some(c=>c.isKerri))loserId=p.id;});
   if(!loserId&&alive.length===1)loserId=alive[0].id;
-  const loserName=room.players.find(p=>p.id===loserId)?.name||'???';
+  const loserName=room.players.find(p=>p.id===loserId)?room.players.find(p=>p.id===loserId).name:'???';
   room.log.unshift(loserName+' i ngeci Kerri!');
   room.players.forEach(p=>{if(!room.leaderboard[p.id])room.leaderboard[p.id]={name:p.name,wins:0,losses:0,games:0};room.leaderboard[p.id].games++;if(p.id===loserId)room.leaderboard[p.id].losses++;else room.leaderboard[p.id].wins++;});
-  io.to(room.code).emit('game_over',{loserId,loserName,results:room.players.map(p=>({id:p.id,name:p.name,hasKerri:room.hands[p.id]?.some(c=>c.isKerri)||false,cardCount:room.hands[p.id]?.length||0})),leaderboard:getLB(room)});
+  io.to(room.code).emit('game_over',{loserId,loserName,results:room.players.map(p=>({id:p.id,name:p.name,hasKerri:room.hands[p.id]?room.hands[p.id].some(c=>c.isKerri):false,cardCount:room.hands[p.id]?room.hands[p.id].length:0})),leaderboard:getLB(room)});
   return true;
 }
 function advanceTurn(room){
   let s=0;
   do{room.activeIdx=(room.activeIdx+1)%room.players.length;s++;}
-  while((room.hands[room.players[room.activeIdx].id]?.length===0||room.players[room.activeIdx].disconnected)&&s<room.players.length);
+  while((room.hands[room.players[room.activeIdx].id]&&room.hands[room.players[room.activeIdx].id].length===0||room.players[room.activeIdx].disconnected)&&s<room.players.length);
   sendGameState(room);
 }
 
@@ -668,7 +678,7 @@ io.on('connection',socket=>{
     socket.join(code);socket.emit('joined',{playerId,roomCode:code,isHost:true});sendLobbyState(room);
   });
   socket.on('join_room',({name,roomCode:code})=>{
-    const room=rooms[code?.toUpperCase()];
+    const room=rooms[code?code.toUpperCase():null];
     if(!room){socket.emit('error_msg',{message:'Dhoma nuk u gjet!'});return;}
     if(room.phase!=='lobby'){socket.emit('error_msg',{message:'Loja ka filluar!'});return;}
     if(room.players.length>=6){socket.emit('error_msg',{message:'Dhoma është plot!'});return;}
@@ -680,7 +690,7 @@ io.on('connection',socket=>{
     io.to(code).emit('chat',{text:player.name+' u bashkua!',system:true});
   });
   socket.on('reconnect_session',({playerId:pid,roomCode:code})=>{
-    const sess=sessions[pid],room=rooms[sess?.roomCode||code];
+    const sess=sessions[pid],room=rooms[sess?sess.roomCode:code];
     if(!room){socket.emit('reconnect_failed');return;}
     const player=room.players.find(p=>p.id===pid);
     if(!player){socket.emit('reconnect_failed');return;}
@@ -690,14 +700,14 @@ io.on('connection',socket=>{
     io.to(room.code).emit('chat',{text:player.name+' u rilidhë!',system:true});
   });
   socket.on('start_game',()=>{
-    const sess=sessions[playerId],room=rooms[sess?.roomCode];if(!room)return;
+    const sess=sessions[playerId],room=rooms[sess?sess.roomCode:null];if(!room)return;
     const player=room.players.find(p=>p.id===playerId);
-    if(!player?.isHost){socket.emit('error_msg',{message:'Vetëm hosti!'});return;}
+    if(!player||!player.isHost){socket.emit('error_msg',{message:'Vetëm hosti!'});return;}
     if(room.players.length<2){socket.emit('error_msg',{message:'Duhen 2+ lojtarë!'});return;}
     startGame(room);
   });
   socket.on('draw_card',({fromPlayerId,cardIndex})=>{
-    const sess=sessions[playerId],room=rooms[sess?.roomCode];if(!room||room.phase!=='playing')return;
+    const sess=sessions[playerId],room=rooms[sess?sess.roomCode:null];if(!room||room.phase!=='playing')return;
     const ap=room.players[room.activeIdx];if(ap.id!==playerId){socket.emit('error_msg',{message:'Nuk është radha jote!'});return;}
     const fp=room.players.find(p=>p.id===fromPlayerId);if(!fp)return;
     const fh=room.hands[fp.id];if(!fh||fh.length===0)return;
@@ -707,20 +717,20 @@ io.on('connection',socket=>{
     autoRemovePairs(room.hands[playerId]);if(checkGameOver(room))return;advanceTurn(room);
   });
   socket.on('chat',({text})=>{
-    const sess=sessions[playerId],room=rooms[sess?.roomCode];if(!room)return;
+    const sess=sessions[playerId],room=rooms[sess?sess.roomCode:null];if(!room)return;
     const sender=room.players.find(p=>p.id===playerId);
     const t=String(text||'').slice(0,200);if(!t.trim())return;
-    io.to(room.code).emit('chat',{text:t,sender:sender?.name||'?'});
+    io.to(room.code).emit('chat',{text:t,sender:sender?sender.name:'?'});
   });
   socket.on('kick_player',({targetId})=>{
-    const sess=sessions[playerId],room=rooms[sess?.roomCode];if(!room||room.phase!=='lobby')return;
-    const host=room.players.find(p=>p.id===playerId);if(!host?.isHost)return;
+    const sess=sessions[playerId],room=rooms[sess?sess.roomCode:null];if(!room||room.phase!=='lobby')return;
+    const host=room.players.find(p=>p.id===playerId);if(!host||!host.isHost)return;
     const target=room.players.find(p=>p.id===targetId);if(!target||target.isHost)return;
     io.to(target.socketId).emit('kicked');room.players=room.players.filter(p=>p.id!==targetId);
     delete sessions[targetId];sendLobbyState(room);
   });
   socket.on('disconnect',()=>{
-    const sess=sessions[playerId];if(!sess?.roomCode)return;
+    const sess=sessions[playerId];if(!sess||!sess.roomCode)return;
     const room=rooms[sess.roomCode];if(!room)return;
     const player=room.players.find(p=>p.id===playerId);if(!player)return;
     if(room.phase==='lobby'){
@@ -732,7 +742,7 @@ io.on('connection',socket=>{
       player.disconnected=true;room.log.unshift(player.name+' u shkëput.');
       io.to(room.code).emit('chat',{text:player.name+' u shkëput...',system:true});
       const ap=room.players[room.activeIdx];
-      if(ap?.id===playerId&&room.phase==='playing')advanceTurn(room);
+      if(ap&&ap.id===playerId&&room.phase==='playing')advanceTurn(room);
       else if(room.phase==='playing')sendGameState(room);
       setTimeout(()=>{
         if(!player.disconnected)return;
