@@ -1,0 +1,14 @@
+{
+  "name": "kerri-online",
+  "version": "2.0.0",
+  "description": "Kujt i ngec Kerri - Multiplayer Online",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "uuid": "^9.0.0",
+    "ws": "^8.16.0"
+  }
+}
