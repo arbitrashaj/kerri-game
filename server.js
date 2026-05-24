@@ -514,7 +514,7 @@ function buildHTML() {
     '  var m=["gold","silver","bronze"];',
     '  return lb.map(function(p,i){',
     '    var rank=medals[i]||(i+1);',
-    '    return "<div class=\\"lb-row\\"><div class=\\"lb-rank "+(m[i]||"")+"\\"">"+rank+"</div><div class=\\"lb-name\\">"+escHtml(p.name)+"</div><div class=\\"lb-stats\\"><span class=\\"lb-win\\">"+p.wins+"W</span><span class=\\"lb-loss\\">"+p.losses+"L</span></div></div>";',
+    '    return "<div class=\\"lb-row\\"><div class=\\"lb-rank "+(m[i]||"")+"\\">"+rank+"</div><div class=\\"lb-name\\">"+escHtml(p.name)+"</div><div class=\\"lb-stats\\"><span class=\\"lb-win\\">"+p.wins+"W</span><span class=\\"lb-loss\\">"+p.losses+"L</span></div></div>";',
     '  }).join("");',
     '}',
     'function toggleLeaderboard(){',
