@@ -78,32 +78,7 @@ body {
   overflow-x: hidden;
 }
 
-/* ── Loading Screen ─────────────────────────────────────── */
-#loading-screen {
-  position: fixed; inset: 0; z-index: 9999;
-  background: #1a1a1a;
-  display: flex; align-items: center; justify-content: center;
-  transition: opacity .5s ease;
-}
-#loading-screen.fade-out { opacity: 0; pointer-events: none; }
-.loading-inner { text-align: center; padding: 2rem; }
-.loading-card-anim {
-  display: flex; gap: 12px; justify-content: center; margin-bottom: 2rem;
-}
-.lc {
-  width: 52px; height: 72px;
-  background: white; border-radius: 8px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 22px; font-weight: 700;
-  animation: card-flip 1.6s ease-in-out infinite;
-}
-.lc1 { animation-delay: 0s;    color: #1a1a1a; }
-.lc2 { animation-delay: .2s;   color: #c0392b; }
-.lc3 { animation-delay: .4s;   color: #be123c; }
-.lc4 { animation-delay: .6s;   color: #c0392b; }
-@keyframes card-flip {
-  0%,100% { transform: rotateY(0deg) scale(1); }
-  50%      { transform: rotateY(180deg) scale(1.05); }
+50%      { transform: rotateY(180deg) scale(1.05); }
 }
 .loading-title { color: white; font-size: 22px; font-weight: 600; margin-bottom: 1.5rem; }
 .loading-bar {
@@ -414,11 +389,6 @@ button, input { touch-action: manipulation; }
 </head>
 <body>
 
-<!-- ═══════════════════════════════════ LOADING SCREEN ═══ -->
-<div id="loading-screen">
-  <div class="loading-inner">
-    <div class="loading-card-anim">
-      <div class="lc lc1">♠</div>
       <div class="lc lc2">♥</div>
       <div class="lc lc3">★</div>
       <div class="lc lc4">♦</div>
@@ -430,7 +400,7 @@ button, input { touch-action: manipulation; }
 </div>
 
 <!-- ═══════════════════════════════════ HOME ════════════════ -->
-<div id="phase-home" class="phase">
+<div id="phase-home" class="phase active">
   <div class="home-wrap">
     <div class="home-logo">♠</div>
     <h1>Kujt i ngec Kerri</h1>
@@ -671,39 +641,8 @@ const SFX = {
 };
 
 // ─── Loading Screen ───────────────────────────────────────────
-const LOADING_HINTS = [
-  'Duke përzier letrat...', 'Duke fshehur Kerrin...',
-  'Duke thirrur miqtë...', 'Duke pregatitur kuvertën...',
-  'Gati për të luajtur!',
-];
-let loadPct = 0;
-let loadInterval = null;
 
-function startLoading() {
-  loadPct = 0;
-  let hintIdx = 0;
-  document.getElementById('loading-fill').style.width = '0%';
-  document.getElementById('loading-hint').textContent = LOADING_HINTS[0];
 
-  loadInterval = setInterval(() => {
-    loadPct += Math.random() * 14 + 4;
-    if (loadPct > 95) loadPct = 95;
-    document.getElementById('loading-fill').style.width = loadPct + '%';
-    hintIdx = Math.min(Math.floor(loadPct / 22), LOADING_HINTS.length - 1);
-    document.getElementById('loading-hint').textContent = LOADING_HINTS[hintIdx];
-  }, 180);
-}
-
-function finishLoading() {
-  clearInterval(loadInterval);
-  document.getElementById('loading-fill').style.width = '100%';
-  document.getElementById('loading-hint').textContent = 'Gati!';
-  setTimeout(() => {
-    const ls = document.getElementById('loading-screen');
-    ls.classList.add('fade-out');
-    setTimeout(() => ls.style.display = 'none', 500);
-  }, 300);
-}
 
 // ─── Username persistence ─────────────────────────────────────
 function loadSavedUsername() {
@@ -867,8 +806,6 @@ function createRoom() {
 // Kerri option selector
 document.addEventListener('DOMContentLoaded', () => {
   // Loading
-  startLoading();
-  setTimeout(finishLoading, 1800);
 
   // Username
   loadSavedUsername();
