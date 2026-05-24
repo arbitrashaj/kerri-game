@@ -463,7 +463,7 @@ function buildHTML() {
     '  if(state.opponents){for(var i=0;i<state.opponents.length;i++){if(state.opponents[i].id===state.drawFromId){df=state.opponents[i];break;}}}',
     '  if(!state.myHand||state.myHand.length===0){m.className="msg-box success";m.textContent="\u2705 Bravo! Ke dal\u00ebt!";}',
     '  else if(state.isMyTurn&&df){m.className="msg-box";m.textContent="\U0001f3af Radha jote! Kliko kartolat e \\""+df.name+"\\".";}',
-    '  else if(state.isMyTurn&&!df){m.className="msg-box warn";m.textContent="\u23f3 Duke pritur lojtar\u00ebt e tjer\u00eb...";}',
+    '  else if(state.isMyTurn){m.className="msg-box warn";m.textContent="\u23f3 Duke pritur lojtar\u00ebt e tjer\u00eb...";}',
     '  else{var a=null;if(state.players){for(var i=0;i<state.players.length;i++){if(state.players[i].id===state.activePlayerId){a=state.players[i];break;}}}m.className="msg-box warn";m.textContent="\u23f3 "+(a?a.name:"\u2014")+" po luan...";}',
     '}',
     'function renderOpponents(state){',
@@ -545,11 +545,13 @@ function buildHTML() {
     '  else{document.getElementById("go-host-btns").style.display="none";document.getElementById("go-wait-btns").style.display="block";}',
     '}',
     'function playAgain(){sendMsg("start_game");}',
-    'function leaveGame(){clearSession();if(socket)socket.disconnect();location.reload();}',
+    'function leaveGame(){clearSession();try{if(socket){socket.off();socket.disconnect();}}catch(e){}setTimeout(function(){location.href=location.origin+location.pathname;},100);}',
     '',
     'function sendChat(){',
     '  var inp=document.getElementById("chat-input"),text=inp.value.trim();',
-    '  if(!text)return;sendMsg("chat",{text:text});inp.value="";',
+    '  if(!text)return;',
+    '  if(!socket||!socket.connected){appendChat({text:"Lidhja u nderpre. Po riprovon...",system:true});return;}',
+    '  sendMsg("chat",{text:text});inp.value="";',
     '}',
     'function appendChat(msg){',
     '  var area=document.getElementById("chat-messages");if(!area)return;',
@@ -650,14 +652,9 @@ function startGame(room){
   room.log.push('Raundi '+room.roundNumber+' filloi!');sendGameState(room);
 }
 function checkGameOver(room){
-  // Count active (non-disconnected) players with cards
-  const alive=room.players.filter(p=>room.hands[p.id]&&room.hands[p.id].length>0&&!p.disconnected);
-  // Also count disconnected players with cards
-  const aliveDisc=room.players.filter(p=>room.hands[p.id]&&room.hands[p.id].length>0&&p.disconnected);
-  // Game continues only if 2+ active players have cards
+  if(room.phase==='gameover')return true;
+  const alive=room.players.filter(p=>!p.disconnected&&room.hands[p.id]&&room.hands[p.id].length>0);
   if(alive.length>1)return false;
-  // If exactly 1 active player has cards but disconnected players also have cards,
-  // those disconnected players are treated as having forfeited - game over
   room.phase='gameover';let loserId=null;
   room.players.forEach(p=>{if(room.hands[p.id]&&room.hands[p.id].some(c=>c.isKerri))loserId=p.id;});
   if(!loserId&&alive.length===1)loserId=alive[0].id;
@@ -668,9 +665,17 @@ function checkGameOver(room){
   return true;
 }
 function advanceTurn(room){
+  const total=room.players.length;
   let s=0;
-  do{room.activeIdx=(room.activeIdx+1)%room.players.length;s++;}
-  while((room.hands[room.players[room.activeIdx].id]&&room.hands[room.players[room.activeIdx].id].length===0||room.players[room.activeIdx].disconnected)&&s<room.players.length);
+  do{
+    room.activeIdx=(room.activeIdx+1)%total;
+    s++;
+  }while(s<total&&(
+    (room.hands[room.players[room.activeIdx].id]||[]).length===0||
+    room.players[room.activeIdx].disconnected
+  ));
+  // If we looped all the way around and found no valid player, check game over
+  if(s>=total){checkGameOver(room);return;}
   sendGameState(room);
 }
 
@@ -720,7 +725,6 @@ io.on('connection',socket=>{
     const card=fh.splice(cardIndex,1)[0];room.hands[playerId].push(card);
     room.log.unshift(ap.name+' mori "'+(card.isKerri?'★ KERRI':card.rank+card.suit)+'" nga '+fp.name);
     autoRemovePairs(room.hands[playerId]);
-    // If active player ran out of cards, skip their turn going forward
     if(checkGameOver(room))return;
     advanceTurn(room);
   });
@@ -749,9 +753,9 @@ io.on('connection',socket=>{
     }else{
       player.disconnected=true;room.log.unshift(player.name+' u shkëput.');
       io.to(room.code).emit('chat',{text:player.name+' u shkëput...',system:true});
-      const ap=room.players[room.activeIdx];
       if(room.phase==='playing'){
         if(checkGameOver(room))return;
+        const ap=room.players[room.activeIdx];
         if(ap&&ap.id===playerId)advanceTurn(room);
         else sendGameState(room);
       }
