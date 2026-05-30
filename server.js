@@ -38,14 +38,14 @@ function buildHTML() {
     '  --shadow-sm:0 2px 8px rgba(0,0,0,.4);--shadow-md:0 6px 24px rgba(0,0,0,.6);',
     '}',
     'body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}',
-    'body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(155,114,232,.07) 0%,transparent 60%),radial-gradient(ellipse at 80% 20%,rgba(212,168,67,.06) 0%,transparent 50%);pointer-events:none;z-index:0}',
-    '.home-wrap,.game-wrap{position:relative;z-index:1}',
+    'body::before{content:"";position:fixed;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(155,114,232,.07) 0%,transparent 60%),radial-gradient(ellipse at 80% 20%,rgba(212,168,67,.06) 0%,transparent 50%);pointer-events:none;z-index:-1}',
+    '.home-wrap{position:relative;z-index:1}',
     '.phase{display:none}.phase.active{display:block;animation:fadeIn .2s ease}',
     '@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}',
     '.home-wrap{max-width:440px;margin:0 auto;padding:2rem 1rem 4rem}',
     '/* ── TABLE LAYOUT ── */',
-    '.game-wrap{position:relative;width:100vw;height:100vh;overflow:hidden;display:flex;flex-direction:column;background:transparent}',
-    '.table-scene{position:relative;flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden}',
+    '#phase-game .game-wrap{position:relative;width:100vw;height:100vh;overflow:hidden;display:flex;flex-direction:column;background:transparent}',
+    '#phase-game .table-scene{position:relative;flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden}',
     '.table-felt{position:absolute;width:72vw;height:62vh;max-width:720px;max-height:420px;background:radial-gradient(ellipse at 50% 40%,#1a6b3a 0%,#145230 60%,#0d3d24 100%);border-radius:50%;box-shadow:0 0 0 12px #8B5E3C,0 0 0 18px #5c3d1e,0 0 60px rgba(0,0,0,.8),inset 0 2px 20px rgba(0,0,0,.4);top:50%;left:50%;transform:translate(-50%,-50%)}',
     '.table-felt::before{content:"";position:absolute;inset:12px;border-radius:50%;border:1.5px solid rgba(255,255,255,.07);pointer-events:none}',
     '.table-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:5}',
@@ -278,12 +278,7 @@ function buildHTML() {
     '      <div class="kerri-options">',
     '        <label class="kerri-opt selected" data-val="joker">',
     '          <input type="radio" name="kerri" value="joker" checked hidden/>',
-    '          <span class="ko-icon">\u2605</span><span class="ko-label">Xholi</span>',
-    '        </label>',
-    '        <label class="kerri-opt" data-val="queen">',
-    '        <label class="kerri-opt" data-val="queen">',
-    '          <input type="radio" name="kerri" value="queen" hidden/>',
-    '          <span class="ko-icon">\\u2660K</span><span class="ko-label">Kerri (K\\u2660)</span>',
+    '          <span class="ko-icon">&#9733;</span><span class="ko-label">Xholi</span>',
     '        </label>',
     '    </div>',
     '    <button class="btn btn-primary" onclick="createRoom()">Krijo dhe prit lojtar\u00ebt \u25b6</button>',
@@ -703,8 +698,7 @@ const RANKS=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
 const SUITS=['\u2660','\u2663','\u2665','\u2666'];
 const KERRI_CONFIGS={
   joker:{rank:'\u2605',suit:'\u2605'},
-  queen:{rank:'Q',suit:'\u2660'},
-  ace:{rank:'A',suit:'\u2665'},
+  queen:{rank:'K',suit:'\u2660'},
 };
 function buildDeck(t){
   const cfg=KERRI_CONFIGS[t]||KERRI_CONFIGS.joker,deck=[];
@@ -792,8 +786,9 @@ io.on('connection',socket=>{
     io.to(code).emit('chat',{text:player.name+' u bashkua!',system:true});
   });
   socket.on('reconnect_session',({playerId:pid,roomCode:code})=>{
-    const roomCode=sess&&sessions[pid]?sessions[pid].roomCode:code;
-    const room=rooms[roomCode]||rooms[code];
+    const sess=sessions[pid];
+    const resolvedCode=sess?sess.roomCode:code;
+    const room=rooms[resolvedCode]||rooms[code];
     if(!room){socket.emit('reconnect_failed');return;}
     const player=room.players.find(p=>p.id===pid);
     if(!player){socket.emit('reconnect_failed');return;}
