@@ -101,8 +101,8 @@ function buildHTML() {
     '.log-item:first-child{color:var(--text);font-weight:500}',
     '.log-item:last-child{border:none}',
     '/* ── LEAVE BTN ── */',
-    '.leave-btn-game{position:absolute;top:.5rem;right:.5rem;z-index:50;background:rgba(224,85,85,.15);border:.5px solid rgba(224,85,85,.3);color:var(--red);border-radius:99px;padding:4px 12px;font-size:11px;cursor:pointer;font-family:inherit}',
-    '.leave-btn-game:hover{background:rgba(224,85,85,.3)}',
+    '.leave-btn-game{display:none}',
+    '.leave-btn-game:hover{background:rgba(224,85,85,.15);color:var(--red);border-color:rgba(224,85,85,.3)}',
     '.home-logo{font-size:56px;text-align:center;margin-bottom:.5rem;filter:drop-shadow(0 0 16px rgba(212,168,67,.5))}',
     'h1{font-size:26px;font-weight:700;text-align:center;letter-spacing:-.5px;background:linear-gradient(135deg,#f0e6c8,#d4a843);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}',
     'h2{font-size:20px;font-weight:600;margin-bottom:1rem}',
@@ -348,9 +348,9 @@ function buildHTML() {
     '      </div>',
     '    </div>',
     '    <div class="log-area"><div class="log-label">Aktivitet</div><div id="game-log"></div></div>',
-    '    <button class="leave-btn-game" onclick="leaveGame()">\\u2715 Dil</button>',
     '    <div class="my-hand-bar">',
     '      <div class="my-hand-top"><div class="my-hand-info"><span class="my-name-chip" id="my-name-chip">Ti</span><span class="hand-count" id="my-hand-count"></span></div></div>',
+    '      <button class="btn btn-secondary" onclick="leaveGame()" style="padding:6px 20px;font-size:13px;opacity:.7;margin-left:auto">Dil nga loja</button>',
     '      <div class="my-hand-cards" id="my-hand"></div>',
     '    </div>',
     '  </div>',
@@ -702,7 +702,7 @@ const HTML = buildHTML();
 app.get('*',(req,res)=>{res.setHeader('Content-Type','text/html; charset=utf-8');res.send(HTML);});
 
 // ── Game Logic ────────────────────────────────────────────
-const rooms={},sessions={};
+const rooms={},sessions={},socketToPlayer={};
 const RANKS=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
 const SUITS=['\u2660','\u2663','\u2665','\u2666'];
 const KERRI_CONFIGS={
@@ -772,10 +772,14 @@ function advanceTurn(room){
 
 io.on('connection',socket=>{
   const playerId=uuidv4();
+  // resolvePlayer: returns the actual playerId for this socket
+  // (could be a reconnected player with old pid)
+  function resolveId(){return socketToPlayer[socket.id]||playerId;}
   socket.on('create_room',({name,kerriType})=>{
     const code=makeRoomCode(),room={code,phase:'lobby',kerriType:kerriType||'joker',players:[],hands:{},activeIdx:0,log:[],leaderboard:{},roundNumber:0};
     rooms[code]=room;const player={id:playerId,name:name||'Lojtar 1',socketId:socket.id,isHost:true};
     room.players.push(player);sessions[playerId]={name:player.name,roomCode:code,isHost:true};
+    socketToPlayer[socket.id]=playerId;
     socket.join(code);socket.emit('joined',{playerId,roomCode:code,isHost:true});sendLobbyState(room);
   });
   socket.on('join_room',({name,roomCode:code})=>{
@@ -786,56 +790,66 @@ io.on('connection',socket=>{
     if(room.players.some(p=>p.name.toLowerCase()===(name||'').toLowerCase())){socket.emit('error_msg',{message:'Ky emer eshte i zene!'});return;}
     const player={id:playerId,name:name||'Lojtar '+(room.players.length+1),socketId:socket.id,isHost:false};
     room.players.push(player);sessions[playerId]={name:player.name,roomCode:code,isHost:false};
+    socketToPlayer[socket.id]=playerId;
     socket.join(code);socket.emit('joined',{playerId,roomCode:code,isHost:false});
     room.log.push(player.name+' u bashkua.');sendLobbyState(room);
     io.to(code).emit('chat',{text:player.name+' u bashkua!',system:true});
   });
   socket.on('reconnect_session',({playerId:pid,roomCode:code})=>{
-    const sess=sessions[pid],room=rooms[sess?sess.roomCode:code];
+    const roomCode=sess&&sessions[pid]?sessions[pid].roomCode:code;
+    const room=rooms[roomCode]||rooms[code];
     if(!room){socket.emit('reconnect_failed');return;}
     const player=room.players.find(p=>p.id===pid);
     if(!player){socket.emit('reconnect_failed');return;}
-    player.socketId=socket.id;player.disconnected=false;socket.join(room.code);
+    // Update socket id and clear disconnected flag
+    player.socketId=socket.id;player.disconnected=false;
+    // Update session
+    sessions[pid]=sessions[pid]||{};
+    sessions[pid].roomCode=room.code;sessions[pid].isHost=player.isHost;
+    socketToPlayer[socket.id]=pid;
+    socket.join(room.code);
     socket.emit('reconnected',{playerId:pid,roomCode:room.code,isHost:player.isHost});
     if(room.phase==='lobby')sendLobbyState(room);else if(room.phase==='playing')sendGameState(room);
     io.to(room.code).emit('chat',{text:player.name+' u rilidhë!',system:true});
   });
   socket.on('start_game',()=>{
-    const sess=sessions[playerId],room=rooms[sess?sess.roomCode:null];if(!room)return;
-    const player=room.players.find(p=>p.id===playerId);
+    const pid=resolveId(),sess=sessions[pid],room=rooms[sess?sess.roomCode:null];if(!room)return;
+    const player=room.players.find(p=>p.id===pid);
     if(!player||!player.isHost){socket.emit('error_msg',{message:'Vetem hosti!'});return;}
     if(room.players.length<2){socket.emit('error_msg',{message:'Duhen 2+ lojtare!'});return;}
     startGame(room);
   });
   socket.on('draw_card',({fromPlayerId,cardIndex})=>{
-    const sess=sessions[playerId],room=rooms[sess?sess.roomCode:null];if(!room||room.phase!=='playing')return;
-    const ap=room.players[room.activeIdx];if(ap.id!==playerId){socket.emit('error_msg',{message:'Nuk eshte radha jote!'});return;}
+    const pid=resolveId(),sess=sessions[pid],room=rooms[sess?sess.roomCode:null];if(!room||room.phase!=='playing')return;
+    const ap=room.players[room.activeIdx];if(ap.id!==pid){socket.emit('error_msg',{message:'Nuk eshte radha jote!'});return;}
     const fp=room.players.find(p=>p.id===fromPlayerId);if(!fp)return;
     const fh=room.hands[fp.id];if(!fh||fh.length===0)return;
     if(cardIndex<0||cardIndex>=fh.length)return;
-    const card=fh.splice(cardIndex,1)[0];room.hands[playerId].push(card);
+    const card=fh.splice(cardIndex,1)[0];room.hands[pid].push(card);
     room.log.unshift(ap.name+' mori "'+(card.isKerri?'★ KERRI':card.rank+card.suit)+'" nga '+fp.name);
-    autoRemovePairs(room.hands[playerId]);if(checkGameOver(room))return;advanceTurn(room);
+    autoRemovePairs(room.hands[pid]);if(checkGameOver(room))return;advanceTurn(room);
   });
   socket.on('chat',({text})=>{
-    const sess=sessions[playerId],room=rooms[sess?sess.roomCode:null];if(!room)return;
-    const sender=room.players.find(p=>p.id===playerId);
+    const pid=resolveId(),sess=sessions[pid],room=rooms[sess?sess.roomCode:null];if(!room)return;
+    const sender=room.players.find(p=>p.id===pid);
     const t=String(text||'').slice(0,200);if(!t.trim())return;
     io.to(room.code).emit('chat',{text:t,sender:sender?sender.name:'?'});
   });
   socket.on('kick_player',({targetId})=>{
-    const sess=sessions[playerId],room=rooms[sess?sess.roomCode:null];if(!room||room.phase!=='lobby')return;
-    const host=room.players.find(p=>p.id===playerId);if(!host||!host.isHost)return;
+    const pid=resolveId(),sess=sessions[pid],room=rooms[sess?sess.roomCode:null];if(!room||room.phase!=='lobby')return;
+    const host=room.players.find(p=>p.id===pid);if(!host||!host.isHost)return;
     const target=room.players.find(p=>p.id===targetId);if(!target||target.isHost)return;
     io.to(target.socketId).emit('kicked');room.players=room.players.filter(p=>p.id!==targetId);
     delete sessions[targetId];sendLobbyState(room);
   });
   socket.on('disconnect',()=>{
-    const sess=sessions[playerId];if(!sess||!sess.roomCode)return;
+    const pid=resolveId();
+    delete socketToPlayer[socket.id];
+    const sess=sessions[pid];if(!sess||!sess.roomCode)return;
     const room=rooms[sess.roomCode];if(!room)return;
-    const player=room.players.find(p=>p.id===playerId);if(!player)return;
+    const player=room.players.find(p=>p.id===pid);if(!player)return;
     if(room.phase==='lobby'){
-      room.players=room.players.filter(p=>p.id!==playerId);delete sessions[playerId];
+      room.players=room.players.filter(p=>p.id!==pid);delete sessions[pid];
       if(room.players.length===0){delete rooms[sess.roomCode];return;}
       if(!room.players.some(p=>p.isHost))room.players[0].isHost=true;
       sendLobbyState(room);
@@ -847,7 +861,7 @@ io.on('connection',socket=>{
       else if(room.phase==='playing')sendGameState(room);
       setTimeout(()=>{
         if(!player.disconnected)return;
-        room.players=room.players.filter(p=>p.id!==playerId);delete sessions[playerId];
+        room.players=room.players.filter(p=>p.id!==pid);delete sessions[pid];
         if(room.players.length===0){delete rooms[sess.roomCode];return;}
         if(!room.players.some(p=>p.isHost))room.players[0].isHost=true;
         io.to(room.code).emit('chat',{text:player.name+' u largua.',system:true});
