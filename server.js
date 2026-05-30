@@ -278,12 +278,12 @@ function buildHTML() {
     '      <div class="kerri-options">',
     '        <label class="kerri-opt selected" data-val="joker">',
     '          <input type="radio" name="kerri" value="joker" checked hidden/>',
-    '          <span class="ko-icon">&#9733;</span><span class="ko-label">Xholi</span>',
+    '          <span class="ko-icon">\u2605</span><span class="ko-label">Xholi</span>',
     '        </label>',
     '        <label class="kerri-opt" data-val="queen">',
     '        <label class="kerri-opt" data-val="queen">',
     '          <input type="radio" name="kerri" value="queen" hidden/>',
-    '          <span class="ko-icon">&#9824;K</span><span class="ko-label">Kerri (K&#9824;)</span>',
+    '          <span class="ko-icon">\\u2660K</span><span class="ko-label">Kerri (K\\u2660)</span>',
     '        </label>',
     '    </div>',
     '    <button class="btn btn-primary" onclick="createRoom()">Krijo dhe prit lojtar\u00ebt \u25b6</button>',
@@ -703,7 +703,8 @@ const RANKS=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
 const SUITS=['\u2660','\u2663','\u2665','\u2666'];
 const KERRI_CONFIGS={
   joker:{rank:'\u2605',suit:'\u2605'},
-  queen:{rank:'K',suit:'\u2660'},
+  queen:{rank:'Q',suit:'\u2660'},
+  ace:{rank:'A',suit:'\u2665'},
 };
 function buildDeck(t){
   const cfg=KERRI_CONFIGS[t]||KERRI_CONFIGS.joker,deck=[];
@@ -791,9 +792,8 @@ io.on('connection',socket=>{
     io.to(code).emit('chat',{text:player.name+' u bashkua!',system:true});
   });
   socket.on('reconnect_session',({playerId:pid,roomCode:code})=>{
-    const sess=sessions[pid];
-    const resolvedCode=sess?sess.roomCode:code;
-    const room=rooms[resolvedCode]||rooms[code];
+    const roomCode=sess&&sessions[pid]?sessions[pid].roomCode:code;
+    const room=rooms[roomCode]||rooms[code];
     if(!room){socket.emit('reconnect_failed');return;}
     const player=room.players.find(p=>p.id===pid);
     if(!player){socket.emit('reconnect_failed');return;}
