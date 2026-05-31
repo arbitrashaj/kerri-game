@@ -38,76 +38,15 @@ function buildHTML() {
     '  --shadow-sm:0 2px 8px rgba(0,0,0,.4);--shadow-md:0 6px 24px rgba(0,0,0,.6);',
     '}',
     'body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}',
-    /* removed body::before */'/* */',
-    '.home-wrap{position:relative;z-index:10}',
     '.phase{display:none}.phase.active{display:block;animation:fadeIn .2s ease}',
     '@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}',
     '.home-wrap{max-width:440px;margin:0 auto;padding:2rem 1rem 4rem}',
-    '/* ── TABLE LAYOUT ── */',
-    '#phase-game .game-wrap{position:relative;width:100vw;height:100vh;overflow:hidden;display:flex;flex-direction:column;background:transparent}',
-    '#phase-game .table-scene{position:relative;flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden}',
-    '#phase-game .table-felt{position:absolute;width:72vw;height:62vh;max-width:720px;max-height:420px;background:radial-gradient(ellipse at 50% 40%,#1a6b3a 0%,#145230 60%,#0d3d24 100%);border-radius:50%;box-shadow:0 0 0 12px #8B5E3C,0 0 0 18px #5c3d1e,0 0 60px rgba(0,0,0,.8),inset 0 2px 20px rgba(0,0,0,.4);top:50%;left:50%;transform:translate(-50%,-50%)}',
-    '#phase-game .table-felt::before{content:"";position:absolute;inset:12px;border-radius:50%;border:1.5px solid rgba(255,255,255,.07);pointer-events:none}',
-    '#phase-game .table-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:5}',
-    '#phase-game .table-logo{font-size:28px;opacity:.25;letter-spacing:8px;color:#fff}',
-    '/* ── PLAYER SEATS ── */',
-    '#phase-game .seat{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px;z-index:10}',
-    '#phase-game .seat-avatar{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#1e1e30,#2a2a40);border:2px solid rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:var(--gold);box-shadow:0 2px 10px rgba(0,0,0,.5)}',
-    '#phase-game .seat-avatar.active-seat{border-color:var(--gold);box-shadow:0 0 0 3px rgba(212,168,67,.4),0 2px 10px rgba(0,0,0,.5);animation:seat-pulse 1s ease-in-out infinite alternate}',
-    '#phase-game .seat-avatar.out-seat{opacity:.4;border-color:rgba(255,255,255,.1)}',
-    '#phase-game .seat-avatar.disc-seat{opacity:.3;border-color:red}',
-    '@keyframes seat-pulse{from{box-shadow:0 0 0 3px rgba(212,168,67,.3)}to{box-shadow:0 0 0 6px rgba(212,168,67,.1)}}',
-    '#phase-game .seat-name{font-size:11px;font-weight:600;color:#f0e6c8;text-shadow:0 1px 4px rgba(0,0,0,.8);white-space:nowrap;max-width:70px;overflow:hidden;text-overflow:ellipsis;text-align:center}',
-    '#phase-game .seat-cards{display:flex;gap:2px;flex-wrap:wrap;justify-content:center;max-width:100px}',
-    '#phase-game .seat-card-back{width:28px;height:40px;border-radius:4px;border:.5px solid rgba(155,114,232,.5);background:linear-gradient(135deg,#2d1f4e,#1e1535);display:inline-flex;align-items:center;justify-content:center;font-size:13px;color:#9b72e8;cursor:default;transition:transform .1s}',
-    '#phase-game .seat-card-back.drawable-seat{cursor:pointer;border-color:var(--gold);background:linear-gradient(135deg,#3d2f1e,#2a1f0e);color:var(--gold);animation:seat-card-glow .8s ease-in-out infinite alternate}',
-    '#phase-game .seat-card-back.drawable-seat:hover{transform:translateY(-4px) scale(1.2)}',
-    '@keyframes seat-card-glow{from{box-shadow:0 0 3px rgba(212,168,67,.3)}to{box-shadow:0 0 8px rgba(212,168,67,.7)}}',
-    '#phase-game .seat-card-back.disc-card{opacity:.3}',
-    '/* ── MY HAND AT BOTTOM ── */',
-    '#phase-game .my-hand-bar{position:relative;z-index:20;background:linear-gradient(180deg,rgba(10,10,20,.0) 0%,rgba(10,10,20,.95) 30%);padding:.5rem 0 1rem;display:flex;flex-direction:column;gap:.4rem;align-items:center}',
-    '#phase-game .my-hand-top{display:flex;align-items:center;justify-content:space-between;gap:8px}',
-    '#phase-game .my-hand-info{display:flex;align-items:center;gap:8px}',
-    '#phase-game .my-name-chip{font-size:12px;font-weight:700;color:var(--gold);background:rgba(212,168,67,.1);border:1px solid rgba(212,168,67,.3);border-radius:99px;padding:3px 10px}',
-    '#phase-game .my-hand-cards{display:flex;flex-wrap:nowrap;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;justify-content:center;padding:0 1rem 4px}',
-    '#phase-game .my-hand-cards::-webkit-scrollbar{display:none}',
-    '/* ── TOP BAR ── */',
-    '#phase-game .game-topbar{position:absolute;top:0;left:0;right:0;z-index:30;display:flex;gap:6px;padding:.5rem .75rem;align-items:center;background:linear-gradient(180deg,rgba(10,10,20,.9) 0%,transparent 100%)}',
-    '.chip{background:rgba(26,26,46,.8);border:.5px solid var(--border);border-radius:99px;padding:4px 12px;font-size:12px;color:var(--muted);backdrop-filter:blur(4px)}',
-    '.chip span{font-weight:600;color:var(--text)}',
-    '.chip.my-turn{background:linear-gradient(135deg,#c8852a,#d4a843);color:#0f0f17;border-color:#d4a843;font-weight:600;box-shadow:0 2px 10px rgba(212,168,67,.4)}',
-    '.chip-btn{cursor:pointer;border:.5px solid var(--border-mid);padding:4px 10px}',
-    '.chip-btn:hover{background:rgba(255,255,255,.1)}',
-    '/* ── GAME MSG ── */',
-    '.msg-box{border-radius:var(--r-md);padding:7px 12px;font-size:13px;background:rgba(91,141,238,.15);color:var(--blue);border:.5px solid rgba(91,141,238,.3);backdrop-filter:blur(4px)}',
-    '.msg-box.warn{background:rgba(200,133,42,.15);color:var(--amber);border-color:rgba(200,133,42,.3)}',
-    '.msg-box.success{background:rgba(76,175,125,.15);color:var(--green);border-color:rgba(76,175,125,.3)}',
-    '#game-msg{margin:0;flex:1}',
-    '/* ── LB PANEL ── */',
-    '#phase-game .lb-panel{position:absolute;top:50px;right:10px;z-index:40;width:200px;background:rgba(15,15,23,.95);border:1px solid rgba(212,168,67,.2);border-radius:var(--r-lg);padding:.75rem;backdrop-filter:blur(8px)}',
-    '/* ── CHAT ── */',
-    '#phase-game .chat-area{position:absolute;bottom:120px;left:10px;z-index:40;width:220px;background:rgba(15,15,23,.85);border:.5px solid var(--border-mid);border-radius:var(--r-lg);overflow:hidden;backdrop-filter:blur(8px)}',
-    '#phase-game #chat-messages{max-height:100px;overflow-y:auto;padding:.5rem .7rem;display:flex;flex-direction:column;gap:2px}',
-    '.chat-msg{font-size:11px;color:var(--text);line-height:1.4}',
-    '.chat-msg .chat-sender{font-weight:600;color:var(--purple)}',
-    '.chat-msg.system{color:var(--hint);font-style:italic}',
-    '.chat-input-row{display:flex;border-top:.5px solid var(--border)}',
-    '.chat-input-row input{flex:1;border:none;border-radius:0;background:transparent;padding:7px 10px;font-size:12px;color:var(--text)}',
-    '.btn-send{padding:7px 10px;background:none;border:none;border-left:.5px solid var(--border);cursor:pointer;font-size:13px;color:var(--purple)}',
-    '/* ── LOG ── */',
-    '#phase-game .log-area{position:absolute;bottom:120px;right:10px;z-index:40;width:200px;background:rgba(15,15,23,.85);border:.5px solid var(--border-mid);border-radius:var(--r-lg);padding:.6rem;backdrop-filter:blur(8px)}',
-    '.log-label{font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.4px;font-weight:500}',
-    '.log-item{font-size:11px;color:var(--muted);padding:2px 0;border-bottom:.5px solid var(--border)}',
-    '.log-item:first-child{color:var(--text);font-weight:500}',
-    '.log-item:last-child{border:none}',
-    '/* ── LEAVE BTN ── */',
-    '.leave-btn-game{display:none}',
-    '.leave-btn-game:hover{background:rgba(224,85,85,.15);color:var(--red);border-color:rgba(224,85,85,.3)}',
+    '.game-wrap{max-width:680px;margin:0 auto;padding:.75rem .75rem 2rem}',
     '.home-logo{font-size:56px;text-align:center;margin-bottom:.5rem}',
-    'h1{font-size:26px;font-weight:700;text-align:center;letter-spacing:-.5px;color:#d4a843}',
+    'h1{font-size:26px;font-weight:700;text-align:center;letter-spacing:-.5px;color:var(--gold)}',
     'h2{font-size:20px;font-weight:600;margin-bottom:1rem}',
     '.home-sub{font-size:13px;color:var(--muted);text-align:center;margin:4px 0 1.5rem}',
-    '.card{background:var(--surface);border:.5px solid var(--border-mid);border-radius:var(--r-lg);padding:1.1rem 1.15rem;margin-bottom:.85rem;box-shadow:var(--shadow-sm),inset 0 1px 0 rgba(212,168,67,.08)}',
+    '.card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:1.1rem 1.15rem;margin-bottom:.85rem;box-shadow:var(--shadow-sm)}',
     '.section-label{display:block;font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:500;text-transform:uppercase;letter-spacing:.4px}',
     '.username-row{display:flex;gap:8px;align-items:center}',
     '.username-avatar{width:40px;height:40px;flex-shrink:0;background:#1a1a1a;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600}',
@@ -123,8 +62,8 @@ function buildHTML() {
     '.ko-label{font-size:12px;color:var(--muted)}',
     '.btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:12px 16px;border-radius:var(--r-md);border:.5px solid var(--border-mid);background:var(--surface);font-size:15px;cursor:pointer;color:var(--text);font-family:inherit;text-align:center;transition:background .12s,transform .08s}',
     '.btn:hover{background:var(--bg)}.btn:active{transform:scale(.98)}',
-    '.btn-primary{font-weight:600;font-size:16px;padding:14px;border-radius:var(--r-lg);background:linear-gradient(135deg,#c8852a 0%,#d4a843 50%,#c8852a 100%);color:#0f0f17;border-color:#d4a843;margin-bottom:4px;box-shadow:0 4px 16px rgba(212,168,67,.35)}',
-    '.btn-primary:hover{background:linear-gradient(135deg,#d4a843 0%,#e0b84e 50%,#d4a843 100%);box-shadow:0 6px 20px rgba(212,168,67,.5)}',
+    '.btn-primary{font-weight:600;font-size:16px;padding:14px;border-radius:var(--r-lg);background:linear-gradient(135deg,#c8852a,#d4a843);color:#0f0f17;border-color:#d4a843;margin-bottom:4px;box-shadow:0 4px 16px rgba(212,168,67,.35)}',
+    '.btn-primary:hover{background:linear-gradient(135deg,#d4a843,#e0b84e)}',
     '.btn-primary:disabled{background:#999;border-color:#999;cursor:not-allowed;transform:none}',
     '.btn-secondary{margin-top:8px;color:var(--muted)}',
     '.btn-back{background:none;border:none;font-size:14px;color:var(--muted);cursor:pointer;margin-bottom:1rem;padding:0;font-family:inherit;display:flex;align-items:center;gap:4px}',
@@ -135,9 +74,9 @@ function buildHTML() {
     ".divider::before,.divider::after{content:'';position:absolute;top:50%;width:38%;height:.5px;background:var(--border-mid)}",
     '.divider::before{left:0}.divider::after{right:0}',
     '.error-msg{background:var(--red-bg);color:var(--red);border-radius:var(--r-md);padding:10px 14px;font-size:14px;margin-top:8px;border:.5px solid #fecaca}',
-    '.lobby-hero{text-align:center;margin-bottom:1rem;padding:1.5rem 1rem;background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);border-radius:var(--r-lg);border:.5px solid rgba(212,168,67,.3);box-shadow:var(--shadow-sm),0 0 30px rgba(212,168,67,.08)}',
+    '.lobby-hero{text-align:center;margin-bottom:1rem;padding:1.5rem 1rem;background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:var(--r-lg);border:.5px solid rgba(212,168,67,.3);box-shadow:var(--shadow-sm)}',
     '.lobby-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}',
-    '.room-code{font-size:46px;font-weight:800;letter-spacing:8px;color:var(--gold);line-height:1;margin-bottom:12px;text-shadow:0 0 20px rgba(212,168,67,.4)}',
+    '.room-code{font-size:46px;font-weight:800;letter-spacing:8px;color:var(--gold);line-height:1;margin-bottom:12px}',
     '.lobby-hint{font-size:12px;color:var(--hint);margin-top:4px}',
     '.lobby-hint.center{text-align:center}',
     '.btn-copy{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border-radius:var(--r-md);border:.5px solid var(--border-mid);background:var(--bg);font-size:13px;cursor:pointer;font-family:inherit}',
@@ -160,17 +99,16 @@ function buildHTML() {
     '.lb-loss{font-size:12px;background:var(--red-bg);color:var(--red);border-radius:99px;padding:2px 8px;font-weight:500}',
     '.lb-panel{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:1rem;margin-bottom:.85rem;box-shadow:var(--shadow-sm)}',
     '.lb-title{font-size:13px;font-weight:600;margin-bottom:8px}',
-    /* topbar moved to table layout */
-    '',
+    '.game-topbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:.75rem;align-items:center}',
     '.chip{background:var(--surface);border:.5px solid var(--border);border-radius:99px;padding:5px 13px;font-size:13px;color:var(--muted);box-shadow:var(--shadow-sm)}',
     '.chip span{font-weight:600;color:var(--text)}',
-    '.chip.my-turn{background:linear-gradient(135deg,#c8852a,#d4a843);color:#0f0f17;border-color:#d4a843;font-weight:600;box-shadow:0 2px 10px rgba(212,168,67,.4)}',
+    '.chip.my-turn{background:linear-gradient(135deg,#c8852a,#d4a843);color:#0f0f17;border-color:#d4a843;font-weight:600}',
     '.chip-btn{cursor:pointer;border:.5px solid var(--border-mid);padding:5px 11px}',
     '.chip-btn:hover{background:var(--bg)}',
     '.msg-box{border-radius:var(--r-md);padding:10px 14px;font-size:14px;margin-bottom:.85rem;background:var(--blue-bg);color:var(--blue);border:.5px solid #bfdbfe}',
     '.msg-box.warn{background:var(--amber-bg);color:var(--amber);border-color:#fde68a}',
     '.msg-box.success{background:var(--green-bg);color:var(--green);border-color:#bbf7d0}',
-    '#opponents-area{display:none}',
+    '#opponents-area{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:.9rem;margin-bottom:.85rem;box-shadow:var(--shadow-sm)}',
     '.opp-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:.5px solid var(--border)}',
     '.opp-row:last-child{border:none}',
     '.opp-info{min-width:90px}',
@@ -178,13 +116,13 @@ function buildHTML() {
     '.opp-name .disc-tag{font-size:11px;background:#f3f4f6;color:#9ca3af;border-radius:99px;padding:1px 7px}',
     '.opp-meta{font-size:12px;color:var(--hint);margin-top:2px}',
     '.opp-cards{display:flex;flex-wrap:wrap;gap:4px;flex:1}',
-    '.card-back{display:inline-flex;align-items:center;justify-content:center;width:38px;height:54px;border-radius:7px;border:.5px solid rgba(155,114,232,.4);background:linear-gradient(135deg,#2d1f4e 0%,#1e1535 100%);font-size:15px;font-weight:800;color:#9b72e8;transition:transform .12s,box-shadow .12s;user-select:none}',
+    '.card-back{display:inline-flex;align-items:center;justify-content:center;width:38px;height:54px;border-radius:7px;border:.5px solid rgba(155,114,232,.4);background:linear-gradient(135deg,#2d1f4e,#1e1535);font-size:15px;font-weight:800;color:#9b72e8;transition:transform .12s,box-shadow .12s;user-select:none}',
     '.card-back.drawable{cursor:pointer;border-color:#7c3aed;animation:pulse-glow .9s ease-in-out infinite alternate;box-shadow:0 0 0 2px rgba(124,58,237,.2)}',
     '.card-back.drawable:hover{transform:translateY(-7px) scale(1.05);box-shadow:0 6px 16px rgba(124,58,237,.3)}',
     '@keyframes pulse-glow{from{border-color:#7c3aed;box-shadow:0 0 0 2px rgba(124,58,237,.15)}to{border-color:#a78bfa;box-shadow:0 0 0 4px rgba(124,58,237,.05)}}',
     '.card-back.not-my-turn{opacity:.45}',
     '.card-back.disc{opacity:.25;pointer-events:none}',
-    '/* hand-area replaced by my-hand-bar */',
+    '.hand-area{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:.9rem;margin-bottom:.85rem;min-height:108px;box-shadow:var(--shadow-sm)}',
     '.hand-label{font-size:12px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:6px;text-transform:uppercase;letter-spacing:.4px;font-weight:500}',
     '.hand-count{font-weight:700;color:var(--text);background:var(--bg);border-radius:99px;padding:1px 8px;font-size:12px}',
     '.cards-row{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-end}',
@@ -198,13 +136,13 @@ function buildHTML() {
     '@keyframes kerri-pulse{from{box-shadow:0 0 0 2px rgba(244,63,94,.15)}to{box-shadow:0 0 0 5px rgba(244,63,94,.05)}}',
     '.drawable-card{cursor:pointer;transition:transform .13s}',
     '.drawable-card:hover{transform:translateY(-8px);box-shadow:var(--shadow-md)}',
-    /* log-area moved */'',
+    '.log-area{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:.9rem;margin-bottom:.85rem;box-shadow:var(--shadow-sm)}',
     '.log-label{font-size:12px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px;font-weight:500}',
     '.log-item{font-size:13px;color:var(--muted);padding:3px 0;border-bottom:.5px solid var(--border)}',
     '.log-item:first-child{color:var(--text);font-weight:500}',
     '.log-item:last-child{border:none}',
-    /* chat-area moved */'',
-    '#phase-game #chat-messages{max-height:130px;overflow-y:auto;padding:.7rem .9rem;display:flex;flex-direction:column;gap:3px}',
+    '.chat-area{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-sm)}',
+    '#chat-messages{max-height:130px;overflow-y:auto;padding:.7rem .9rem;display:flex;flex-direction:column;gap:3px}',
     '.chat-msg{font-size:13px;color:var(--text);line-height:1.4}',
     '.chat-msg .chat-sender{font-weight:600;color:var(--purple)}',
     '.chat-msg.system{color:var(--hint);font-style:italic}',
@@ -214,7 +152,7 @@ function buildHTML() {
     '.btn-send:hover{background:var(--purple-bg)}',
     '.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center;z-index:200;padding:.5rem}',
     '@media(min-width:480px){.modal-overlay{align-items:center}}',
-    '.modal-box{background:linear-gradient(180deg,#1e1e30 0%,#16161f 100%);border:1px solid rgba(212,168,67,.2);border-radius:var(--r-xl) var(--r-xl) 0 0;padding:1.5rem 1.25rem 2rem;width:100%;max-width:520px;animation:slideUp .2s ease;box-shadow:0 -8px 40px rgba(0,0,0,.6)}',
+    '.modal-box{background:var(--surface);border-radius:var(--r-xl) var(--r-xl) 0 0;padding:1.5rem 1.25rem 2rem;width:100%;max-width:520px;animation:slideUp .2s ease}',
     '@media(min-width:480px){.modal-box{border-radius:var(--r-xl);padding:1.5rem}}',
     '@keyframes slideUp{from{transform:translateY(40px);opacity:.6}to{transform:none;opacity:1}}',
     '.modal-title{font-size:17px;font-weight:600;margin-bottom:4px}',
@@ -228,7 +166,7 @@ function buildHTML() {
     '.badge-kerri{background:var(--red-bg);color:var(--red)}',
     '.badge-out{background:var(--green-bg);color:var(--green)}',
     '.badge-safe{background:var(--blue-bg);color:var(--blue)}',
-    '#reconnect-banner{position:fixed;top:0;left:0;right:0;z-index:500;background:linear-gradient(90deg,#c8852a,#d4a843,#c8852a);color:#0f0f17;padding:10px 16px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;gap:10px;box-shadow:0 2px 12px rgba(212,168,67,.4)}',
+    '#reconnect-banner{position:fixed;top:0;left:0;right:0;z-index:500;background:linear-gradient(90deg,#c8852a,#d4a843,#c8852a);color:#0f0f17;padding:10px 16px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;gap:10px}',
     '.reconnect-inner{display:flex;align-items:center;gap:10px}',
     '.reconnect-spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .8s linear infinite}',
     '@keyframes spin{to{transform:rotate(360deg)}}',
@@ -278,8 +216,17 @@ function buildHTML() {
     '      <div class="kerri-options">',
     '        <label class="kerri-opt selected" data-val="joker">',
     '          <input type="radio" name="kerri" value="joker" checked hidden/>',
-    '          <span class="ko-icon">&#9733;</span><span class="ko-label">Xholi</span>',
+    '          <span class="ko-icon">\u2605</span><span class="ko-label">Xholi</span>',
     '        </label>',
+    '        <label class="kerri-opt" data-val="queen">',
+    '          <input type="radio" name="kerri" value="queen" hidden/>',
+    '          <span class="ko-icon">\u2660Q</span><span class="ko-label">Mbret\u00ebresha</span>',
+    '        </label>',
+    '        <label class="kerri-opt" data-val="ace">',
+    '          <input type="radio" name="kerri" value="ace" hidden/>',
+    '          <span class="ko-icon">\u2665A</span><span class="ko-label">Asi</span>',
+    '        </label>',
+    '      </div>',
     '    </div>',
     '    <button class="btn btn-primary" onclick="createRoom()">Krijo dhe prit lojtar\u00ebt \u25b6</button>',
     '    <div id="create-error" class="error-msg" style="display:none"></div>',
@@ -310,39 +257,38 @@ function buildHTML() {
     '    <div id="lobby-wait-area" style="display:none">',
     '      <div class="msg-box warn">\u23f3 Duke pritur hostin...</div>',
     '    </div>',
+    '    <button class="btn btn-secondary" onclick="leaveGame()" style="margin-top:1rem">Dil nga loja</button>',
     '  </div>',
-    '    <button class="btn btn-secondary" onclick="leaveGame()" style="margin-top:1rem;opacity:.6">Dil nga loja</button>',
     '</div>',
     '',
     '<div id="phase-game" class="phase">',
     '  <div class="game-wrap">',
     '    <div class="game-topbar">',
-    '      <div class="chip" id="chip-turn">\\u2014</div>',
-    '      <div class="chip" id="chip-room">\\u2014</div>',
-    '      <div id="game-msg" class="msg-box">Duke pritur...</div>',
+    '      <div class="chip" id="chip-turn">\u2014</div>',
+    '      <div class="chip" id="chip-room">\u2014</div>',
     '      <button class="chip chip-btn" onclick="toggleLeaderboard()" id="lb-toggle-btn">🏆</button>',
     '    </div>',
     '    <div id="lb-panel" class="lb-panel" style="display:none">',
     '      <div class="lb-title">🏆 Leaderboard</div>',
     '      <div id="lb-content"></div>',
     '    </div>',
-    '    <div class="table-scene">',
-    '      <div class="table-felt"><div class="table-center"><div class="table-logo">♠</div></div></div>',
-    '      <div id="seats-area"></div>',
-    '      <div id="opponents-area" style="display:none"></div>',
+    '    <div class="msg-box" id="game-msg">Duke pritur...</div>',
+    '    <div id="opponents-area"></div>',
+    '    <div class="hand-area">',
+    '      <div class="hand-label">Letrat e tua <span class="hand-count" id="my-hand-count"></span></div>',
+    '      <div class="cards-row" id="my-hand"></div>',
+    '    </div>',
+    '    <div class="log-area">',
+    '      <div class="log-label">Aktivitet</div>',
+    '      <div id="game-log"></div>',
     '    </div>',
     '    <div class="chat-area">',
     '      <div id="chat-messages"></div>',
     '      <div class="chat-input-row">',
-    '        <input type="text" id="chat-input" placeholder="Chat..." onkeydown="if(event.key===\'Enter\')sendChat()" maxlength="200"/>',
-    '        <button class="btn-send" onclick="sendChat()">➤</button>',
+    '        <input type="text" id="chat-input" placeholder="Shkruaj mesazh..." onkeydown="if(event.key===\'Enter\')sendChat()" maxlength="200"/>',
+    '        <button class="btn-send" onclick="sendChat()">\u27a4</button>',
     '      </div>',
-    '    </div>',
-    '    <div class="log-area"><div class="log-label">Aktivitet</div><div id="game-log"></div></div>',
-    '    <div class="my-hand-bar">',
-    '      <div class="my-hand-top"><div class="my-hand-info"><span class="my-name-chip" id="my-name-chip">Ti</span><span class="hand-count" id="my-hand-count"></span></div></div>',
-    '      <button class="btn btn-secondary" onclick="leaveGame()" style="padding:6px 20px;font-size:13px;opacity:.7;margin-left:auto">Dil nga loja</button>',
-    '      <div class="my-hand-cards" id="my-hand"></div>',
+    '    <button class="btn btn-secondary" onclick="leaveGame()" style="margin-top:.5rem">Dil nga loja</button>',
     '    </div>',
     '  </div>',
     '</div>',
@@ -509,8 +455,8 @@ function buildHTML() {
     '  tc.textContent=isMT?"🎯 Radha jote!":"Radha e: "+(ap?ap.name:"\u2014");',
     '  tc.className="chip"+(isMT?" my-turn":"");',
     '  document.getElementById("chip-room").textContent="\u2660 "+state.roomCode;',
-    '  var nc=document.getElementById("my-name-chip");if(nc&&myName)nc.textContent=myName;',
-    '  renderMsg(state);renderSeats(state);renderMyHand(state.myHand);',
+    '  renderMsg(state);renderOpponents(state);renderMyHand(state.myHand);',
+    '  document.getElementById("game-log").innerHTML=(state.log||[]).map(function(l){return "<div class=\\"log-item\\">"+escHtml(l)+"</div>";}).join("");',
     '  if(document.getElementById("lb-panel").style.display!=="none")renderLbPanel(state.leaderboard);',
     '}',
     'function renderMsg(state){',
@@ -539,43 +485,6 @@ function buildHTML() {
     '    area.appendChild(row);',
     '  });',
     '}',
-    'function renderSeats(state){',
-    '  var area=document.getElementById("seats-area");',
-    '  if(!area)return;',
-    '  area.innerHTML="";',
-    '  var opps=state.opponents;',
-    '  var n=opps.length;',
-    '  // Seat positions for up to 5 opponents around the table',
-    '  // Positions as % of viewport: top/left, plus label placement',
-    '  var positions=[',
-    '    {top:"8%",left:"50%",transform:"translateX(-50%)"},',
-    '    {top:"25%",left:"82%",transform:"translate(-50%,-50%)"},',
-    '    {top:"70%",left:"82%",transform:"translate(-50%,-50%)"},',
-    '    {top:"70%",left:"18%",transform:"translate(-50%,-50%)"},',
-    '    {top:"25%",left:"18%",transform:"translate(-50%,-50%)"},',
-    '  ];',
-    '  opps.forEach(function(opp,i){',
-    '    var pos=positions[i%positions.length];',
-    '    var iD=state.isMyTurn&&opp.id===state.drawFromId&&opp.cardCount>0;',
-    '    var seat=document.createElement("div");',
-    '    seat.className="seat";',
-    '    seat.style.top=pos.top;seat.style.left=pos.left;seat.style.transform=pos.transform;',
-    '    // Avatar',
-    '    var avcls="seat-avatar"+(iD?" active-seat":opp.isOut?" out-seat":opp.disconnected?" disc-seat":"");',
-    '    var avletter=opp.name?opp.name.charAt(0).toUpperCase():"?";',
-    '    // Cards',
-    '    var cardHtml="";',
-    '    for(var k=0;k<opp.cardCount;k++){',
-    '      var ccls="seat-card-back"+(opp.disconnected?" disc-card":iD?" drawable-seat":"");',
-    '      var clk=iD?" onclick=\\"openDrawModal(\'"+ escAttr(opp.id) +"\',\'"+ escAttr(opp.name) +"\',"+ opp.cardCount +")\\"":"";',
-    '      cardHtml+="<div class=\'"+ ccls +"\'"+ clk +">\u2660</div>";',
-    '    }',
-    '    var outBadge=opp.isOut?"<span style=\'font-size:10px;color:var(--green)\'>\u2713 Doli</span>":"";',
-    '    var discBadge=opp.disconnected?"<span style=\'font-size:9px;color:var(--red)\'>shkëputur</span>":"";',
-    '    seat.innerHTML="<div class=\'"+ avcls +"\'>"+avletter+"</div><div class=\'seat-name\'>"+escHtml(opp.name)+"</div><div class=\'seat-cards\'>"+cardHtml+"</div>"+outBadge+discBadge;',
-    '    area.appendChild(seat);',
-    '  });',
-    '}',
     'function renderMyHand(hand){',
     '  var c=document.getElementById("my-hand"),cnt=document.getElementById("my-hand-count");',
     '  if(!hand||hand.length===0){c.innerHTML="<span style=\\"font-size:14px;color:#999\\">Ke dal\u00ebt \u2713</span>";if(cnt)cnt.textContent="";return;}',
@@ -590,9 +499,10 @@ function buildHTML() {
     '}',
     'function openDrawModal(fId,fName,cnt){',
     '  document.getElementById("modal-title").textContent="Dora e "+fName;',
+    '  var idx=[];for(var i=0;i<cnt;i++)idx.push(i);for(var i=idx.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=idx[i];idx[i]=idx[j];idx[j]=t;}',
     '  var html="";',
-    '  for(var i=0;i<cnt;i++){',
-    '    html+="<div class=\\"playing-card drawable-card black-card\\" onclick=\\"confirmDraw(\'"+escAttr(fId)+"\',"+i+")\\"><div class=\\"rank\\">\u2660</div><div class=\\"suit\\" style=\\"font-size:11px\\">"+(i+1)+"</div></div>";',
+    '  for(var k=0;k<idx.length;k++){',
+    '    html+="<div class=\\"playing-card drawable-card black-card\\" onclick=\\"confirmDraw(\'"+escAttr(fId)+"\',"+idx[k]+")\\"><div class=\\"rank\\">\u2660</div><div class=\\"suit\\" style=\\"font-size:11px\\">"+(k+1)+"</div></div>";',
     '  }',
     '  document.getElementById("modal-cards").innerHTML=html;',
     '  document.getElementById("draw-modal").style.display="flex";',
@@ -638,7 +548,7 @@ function buildHTML() {
     '  else{document.getElementById("go-host-btns").style.display="none";document.getElementById("go-wait-btns").style.display="block";}',
     '}',
     'function playAgain(){sendMsg("start_game");}',
-    'function leaveGame(){clearSession();if(socket)socket.disconnect();location.reload();}',
+    'function leaveGame(){clearSession();try{if(socket){socket.off();socket.disconnect();}}catch(e){}setTimeout(function(){location.href=location.origin+location.pathname;},150);}',
     '',
     'function sendChat(){',
     '  var inp=document.getElementById("chat-input"),text=inp.value.trim();',
@@ -698,7 +608,7 @@ const RANKS=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
 const SUITS=['\u2660','\u2663','\u2665','\u2666'];
 const KERRI_CONFIGS={
   joker:{rank:'\u2605',suit:'\u2605'},
-  queen:{rank:'K',suit:'\u2660'},
+
 };
 function buildDeck(t){
   const cfg=KERRI_CONFIGS[t]||KERRI_CONFIGS.joker,deck=[];
@@ -742,7 +652,8 @@ function startGame(room){
   room.log.push('Raundi '+room.roundNumber+' filloi!');sendGameState(room);
 }
 function checkGameOver(room){
-  const alive=room.players.filter(p=>room.hands[p.id]&&room.hands[p.id].length>0);
+  if(room.phase==='gameover')return true;
+  const alive=room.players.filter(p=>!p.disconnected&&room.hands[p.id]&&room.hands[p.id].length>0);
   if(alive.length>1)return false;
   room.phase='gameover';let loserId=null;
   room.players.forEach(p=>{if(room.hands[p.id]&&room.hands[p.id].some(c=>c.isKerri))loserId=p.id;});
@@ -754,16 +665,16 @@ function checkGameOver(room){
   return true;
 }
 function advanceTurn(room){
+  const total=room.players.length;
   let s=0;
-  do{room.activeIdx=(room.activeIdx+1)%room.players.length;s++;}
-  while((room.hands[room.players[room.activeIdx].id]&&room.hands[room.players[room.activeIdx].id].length===0||room.players[room.activeIdx].disconnected)&&s<room.players.length);
+  do{room.activeIdx=(room.activeIdx+1)%total;s++;}
+  while(s<total&&((room.hands[room.players[room.activeIdx].id]||[]).length===0||room.players[room.activeIdx].disconnected));
+  if(s>=total){checkGameOver(room);return;}
   sendGameState(room);
 }
 
 io.on('connection',socket=>{
   const playerId=uuidv4();
-  // resolvePlayer: returns the actual playerId for this socket
-  // (could be a reconnected player with old pid)
   function resolveId(){return socketToPlayer[socket.id]||playerId;}
   socket.on('create_room',({name,kerriType})=>{
     const code=makeRoomCode(),room={code,phase:'lobby',kerriType:kerriType||'joker',players:[],hands:{},activeIdx:0,log:[],leaderboard:{},roundNumber:0};
@@ -787,16 +698,11 @@ io.on('connection',socket=>{
   });
   socket.on('reconnect_session',({playerId:pid,roomCode:code})=>{
     const sess=sessions[pid];
-    const resolvedCode=sess?sess.roomCode:code;
-    const room=rooms[resolvedCode]||rooms[code];
+    const room=rooms[sess?sess.roomCode:code]||rooms[code];
     if(!room){socket.emit('reconnect_failed');return;}
     const player=room.players.find(p=>p.id===pid);
     if(!player){socket.emit('reconnect_failed');return;}
-    // Update socket id and clear disconnected flag
     player.socketId=socket.id;player.disconnected=false;
-    // Update session
-    sessions[pid]=sessions[pid]||{};
-    sessions[pid].roomCode=room.code;sessions[pid].isHost=player.isHost;
     socketToPlayer[socket.id]=pid;
     socket.join(room.code);
     socket.emit('reconnected',{playerId:pid,roomCode:room.code,isHost:player.isHost});
@@ -804,8 +710,8 @@ io.on('connection',socket=>{
     io.to(room.code).emit('chat',{text:player.name+' u rilidhë!',system:true});
   });
   socket.on('start_game',()=>{
-    const pid=resolveId(),sess=sessions[pid],room=rooms[sess?sess.roomCode:null];if(!room)return;
-    const player=room.players.find(p=>p.id===pid);
+    const sess=sessions[playerId],room=rooms[sess?sess.roomCode:null];if(!room)return;
+    const player=room.players.find(p=>p.id===playerId);
     if(!player||!player.isHost){socket.emit('error_msg',{message:'Vetem hosti!'});return;}
     if(room.players.length<2){socket.emit('error_msg',{message:'Duhen 2+ lojtare!'});return;}
     startGame(room);
@@ -818,24 +724,25 @@ io.on('connection',socket=>{
     if(cardIndex<0||cardIndex>=fh.length)return;
     const card=fh.splice(cardIndex,1)[0];room.hands[pid].push(card);
     room.log.unshift(ap.name+' mori "'+(card.isKerri?'★ KERRI':card.rank+card.suit)+'" nga '+fp.name);
-    autoRemovePairs(room.hands[pid]);if(checkGameOver(room))return;advanceTurn(room);
+    autoRemovePairs(room.hands[pid]);
+    if(checkGameOver(room))return;
+    advanceTurn(room);
   });
   socket.on('chat',({text})=>{
-    const pid=resolveId(),sess=sessions[pid],room=rooms[sess?sess.roomCode:null];if(!room)return;
-    const sender=room.players.find(p=>p.id===pid);
+    const sess=sessions[playerId],room=rooms[sess?sess.roomCode:null];if(!room)return;
+    const sender=room.players.find(p=>p.id===playerId);
     const t=String(text||'').slice(0,200);if(!t.trim())return;
     io.to(room.code).emit('chat',{text:t,sender:sender?sender.name:'?'});
   });
   socket.on('kick_player',({targetId})=>{
-    const pid=resolveId(),sess=sessions[pid],room=rooms[sess?sess.roomCode:null];if(!room||room.phase!=='lobby')return;
-    const host=room.players.find(p=>p.id===pid);if(!host||!host.isHost)return;
+    const sess=sessions[playerId],room=rooms[sess?sess.roomCode:null];if(!room||room.phase!=='lobby')return;
+    const host=room.players.find(p=>p.id===playerId);if(!host||!host.isHost)return;
     const target=room.players.find(p=>p.id===targetId);if(!target||target.isHost)return;
     io.to(target.socketId).emit('kicked');room.players=room.players.filter(p=>p.id!==targetId);
     delete sessions[targetId];sendLobbyState(room);
   });
   socket.on('disconnect',()=>{
-    const pid=resolveId();
-    delete socketToPlayer[socket.id];
+    const pid=resolveId();delete socketToPlayer[socket.id];
     const sess=sessions[pid];if(!sess||!sess.roomCode)return;
     const room=rooms[sess.roomCode];if(!room)return;
     const player=room.players.find(p=>p.id===pid);if(!player)return;
@@ -847,9 +754,12 @@ io.on('connection',socket=>{
     }else{
       player.disconnected=true;room.log.unshift(player.name+' u shkëput.');
       io.to(room.code).emit('chat',{text:player.name+' u shkëput...',system:true});
-      const ap=room.players[room.activeIdx];
-      if(ap&&ap.id===playerId&&room.phase==='playing')advanceTurn(room);
-      else if(room.phase==='playing')sendGameState(room);
+      if(room.phase==='playing'){
+        if(checkGameOver(room))return;
+        const ap=room.players[room.activeIdx];
+        if(ap&&ap.id===playerId)advanceTurn(room);
+        else sendGameState(room);
+      }
       setTimeout(()=>{
         if(!player.disconnected)return;
         room.players=room.players.filter(p=>p.id!==pid);delete sessions[pid];
