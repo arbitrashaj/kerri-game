@@ -586,10 +586,12 @@ function buildHTML() {
     '    renderMyHand(lastHandData);',
     '  }else{',
     '    var hand=lastHandData;',
-    '    var moved=hand.splice(selectedCardIdx,1)[0];',
-    '    hand.splice(idx,0,moved);',
+    '    var fromI=selectedCardIdx,toI=idx;',
+    '    var moved=hand.splice(fromI,1)[0];',
+    '    hand.splice(toI,0,moved);',
     '    selectedCardIdx=null;',
     '    renderMyHand(hand);',
+    '    sendMsg("reorder_hand",{fromIdx:fromI,toIdx:toI});',
     '  }',
     '}',
     'function openDrawModal(fId,fName,cnt){',
@@ -852,6 +854,13 @@ io.on('connection',socket=>{
     autoRemovePairs(room.hands[pid]);
     if(checkGameOver(room))return;
     advanceTurn(room);
+  });
+  socket.on('reorder_hand',({fromIdx,toIdx})=>{
+    const pid=resolveId(),sess=sessions[pid],room=rooms[sess?sess.roomCode:null];if(!room||room.phase!=='playing')return;
+    const hand=room.hands[pid];if(!hand)return;
+    if(fromIdx<0||fromIdx>=hand.length||toIdx<0||toIdx>=hand.length)return;
+    const moved=hand.splice(fromIdx,1)[0];
+    hand.splice(toIdx,0,moved);
   });
   socket.on('chat',({text})=>{
     const sess=sessions[playerId],room=rooms[sess?sess.roomCode:null];if(!room)return;
