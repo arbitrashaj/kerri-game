@@ -665,7 +665,7 @@ function buildHTML() {
     '      var cc="seat-card-back"+(opp.disconnected?" disc-card":iD?" drawable-seat":"");',
     '      var ang=n>1?(k/(n-1)-0.5)*maxA:0;',
     '      var lift=n>1?Math.abs(k-(n-1)/2)*(-1.5):0;',
-    '      var ck=iD?" data-id=\'"+ escAttr(opp.id) +"\' data-idx="+k+" onclick=\'cardFlyDraw(this,"+k+")\'":"";',
+    '      var ck=iD?" data-id=\'"+ escAttr(opp.id) +"\' data-idx=\'"+ k +"\' onclick=\'cardFlyDraw(this,"+ k +")\'":"";',
     '      cards+="<div class=\'"+ cc +"\'"+ ck +" style=\'transform:rotate("+ang+"deg) translateY("+lift+"px);transform-origin:bottom center\'>&#9824;</div>";',
     '    }',
     '    var lbl=opp.isOut?"<span style=\'color:var(--green)\'>✓ Doli</span>":n+" letra";',
