@@ -217,6 +217,7 @@ function buildHTML() {
     '@media(max-width:600px){#phase-game .table-scene{flex:0 0 auto;height:42vh;order:0}}',
     '@media(max-width:600px){#phase-game .table-felt{width:min(38vh,88vw);height:min(38vh,88vw);max-width:none;max-height:none}}',
     '@media(max-width:600px){#phase-game #seats-area{width:min(38vh,88vw);height:min(38vh,88vw)}}',
+    '@media(max-width:600px){#phase-game .seat-cards{width:min(22vw,82px)}}',
     '@media(max-width:600px){#phase-game .game-topbar{padding:.3rem .5rem;gap:4px;flex-wrap:nowrap;overflow:hidden}}',
     '@media(max-width:600px){#phase-game #game-msg{font-size:11px;padding:4px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}',
     '@media(max-width:600px){#phase-game .my-hand-bar{padding:.3rem .3rem .5rem;order:1}}',
