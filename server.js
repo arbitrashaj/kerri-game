@@ -563,7 +563,7 @@ function buildHTML() {
     '    lastHandData=newHand.slice();',
     '    renderMyHand(lastHandData);',
     '  }',
-    '  var gl=document.getElementById("game-log");if(gl)gl.innerHTML=(state.log||[]).map(function(l){return "<div class=\\\\"log-item\\\\">"+escHtml(l)+"</div>";}).join("");',
+    '  var gl=document.getElementById(\"game-log\");if(gl)gl.innerHTML=(state.log||[]).map(function(l){return \"<div class=\'log-item\'>\"+escHtml(l)+\"</div>\";}).join(\"\");',
     '  if(document.getElementById("lb-panel").style.display!=="none")renderLbPanel(state.leaderboard);',
     '}',
     'function renderMsg(state){',
