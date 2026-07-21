@@ -3,10 +3,12 @@
 // ============================================================
 const express = require('express');
 const http    = require('http');
+const path    = require('path');
 const { Server } = require('socket.io');
 const { v4: uuidv4 } = require('uuid');
 
 const app    = express();
+app.use('/assets', express.static(path.join(__dirname, 'assets')));
 const server = http.createServer(app);
 const io     = new Server(server, {
   cors: { origin: '*' },
@@ -184,7 +186,7 @@ function buildHTML() {
     '#phase-game .game-topbar{flex-shrink:0;display:flex;gap:6px;padding:.5rem .75rem;align-items:center;background:rgba(15,15,23,.9)}',
     '#phase-game #game-msg{margin:0;flex:1;padding:6px 12px;font-size:13px}',
     '#phase-game .table-scene{flex:1;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden;min-height:0}',
-    '#phase-game .table-felt{position:absolute;width:57vw;height:28.5vw;background:radial-gradient(ellipse at 50% 40%,#1f4a3d,#173a30 75%);border-radius:50%;box-shadow:0 0 0 8px #3c2a1e,0 0 0 14px #6b4226,0 0 0 17px #8a5a34,inset 0 0 60px rgba(0,0,0,.55),0 20px 40px rgba(0,0,0,.6);top:50%;left:50%;transform:translate(-50%,-50%)}',
+    '#phase-game .table-felt{position:absolute;width:57vw;height:28.5vw;background-image:url(/assets/table_felt.png);background-size:100% 100%;background-repeat:no-repeat;top:50%;left:50%;transform:translate(-50%,-50%)}',
     '#phase-game .table-logo{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:34%;height:34%;opacity:.09;color:var(--gold)}',
     '#phase-game .table-logo svg{width:100%;height:100%;fill:currentColor}',
     '#phase-game #seats-area{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:57vw;height:28.5vw}',
