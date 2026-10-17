@@ -5,7 +5,7 @@ const express = require('express');
 const http    = require('http');
 const path    = require('path');
 const { Server } = require('socket.io');
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID: uuidv4 } = require('node:crypto');
 
 const app    = express();
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
@@ -446,7 +446,7 @@ function buildHTML() {
     '</div>',
     '',
     '<script>',
-    'var socket=null,myId=null,myName="",roomCode=null,isHost=false;',
+    'var socket=null,myId=null,myName="",roomCode=null,isHost=false,sessionToken=null;',
     'var RED_SUITS={"\\u2665":true,"\\u2666":true};',
     '',
     'var AudioCtx=window.AudioContext||window.webkitAudioContext;',
@@ -470,39 +470,41 @@ function buildHTML() {
     '  error:function(){playTone(300,"square",.15,.15);}',
     '};',
     '',
-    'function loadSavedUsername(){var s=localStorage.getItem("kerri_username");if(s){document.getElementById("home-name").value=s;updateAvatar(s);}}',
-    'function saveUsername(n){localStorage.setItem("kerri_username",n);updateAvatar(n);}',
+    'function loadSavedUsername(){try{var s=localStorage.getItem("kerri_username");if(s){document.getElementById("home-name").value=s;updateAvatar(s);}}catch(e){}}',
+    'function saveUsername(n){try{localStorage.setItem("kerri_username",n);}catch(e){}updateAvatar(n);}',
     'function updateAvatar(n){var a=document.getElementById("home-avatar");if(a&&n)a.textContent=n.charAt(0).toUpperCase();}',
     '',
-    'function saveSession(){if(myId&&roomCode)localStorage.setItem("kerri_session",JSON.stringify({myId:myId,roomCode:roomCode,myName:myName,isHost:isHost}));}',
-    'function clearSession(){localStorage.removeItem("kerri_session");}',
+    'function saveSession(){try{if(myId&&roomCode)localStorage.setItem("kerri_session",JSON.stringify({myId:myId,roomCode:roomCode,myName:myName,isHost:isHost,sessionToken:sessionToken}));}catch(e){}}',
+    'function clearSession(){try{localStorage.removeItem("kerri_session");}catch(e){}}',
     'function getSavedSession(){try{return JSON.parse(localStorage.getItem("kerri_session"));}catch(e){return null;}}',
     '',
     'function connectSocket(cb){',
     '  if(socket&&socket.connected){cb();return;}',
+    '  if(socket){socket.off();socket.disconnect();}',
     '  socket=io({transports:["websocket","polling"]});',
-    '  socket.on("connect",cb);',
-    '  socket.on("disconnect",function(){document.getElementById("reconnect-banner").style.display="flex";});',
-    '  socket.on("reconnect",function(){',
-    '    document.getElementById("reconnect-banner").style.display="none";',
+    '  var firstConnect=true;',
+    '  socket.on("connect",function(){',
+    '    if(firstConnect){firstConnect=false;cb();return;}',
     '    var sess=getSavedSession();',
-    '    if(sess)socket.emit("reconnect_session",{playerId:sess.myId,roomCode:sess.roomCode});',
+    '    if(sess)socket.emit("reconnect_session",{playerId:sess.myId,roomCode:sess.roomCode,sessionToken:sess.sessionToken});',
+    '    else document.getElementById("reconnect-banner").style.display="none";',
     '  });',
+    '  socket.on("disconnect",function(){document.getElementById("reconnect-banner").style.display="flex";});',
     '  socket.on("joined",handleJoined);',
     '  socket.on("reconnected",handleJoined);',
-    '  socket.on("reconnect_failed",function(){clearSession();showPhase("home");});',
+    '  socket.on("reconnect_failed",function(){clearSession();myId=null;sessionToken=null;document.getElementById("reconnect-banner").style.display="none";showPhase("home");});',
     '  socket.on("lobby_state",renderLobby);',
     '  socket.on("game_state",renderGame);',
     '  socket.on("card_revealed",showCardReveal);',
     '  socket.on("game_over",renderGameOver);',
     '  socket.on("chat",function(msg){appendChat(msg);if(!msg.system)SFX.chat();});',
     '  socket.on("kicked",function(){clearSession();showPhase("home");showError("home-error","U hoqe nga dhoma.");});',
-    '  socket.on("error_msg",function(msg){showError("home-error",msg.message);showError("create-error",msg.message);SFX.error();});',
+    '  socket.on("error_msg",function(msg){showError("home-error",msg.message);showError("create-error",msg.message);document.getElementById("game-msg").textContent=msg.message;SFX.error();});',
     '}',
-    'function sendMsg(type,data){if(socket)socket.emit(type,data||{});}',
+    'function sendMsg(type,data){if(socket&&socket.connected)socket.emit(type,data||{});}',
     '',
     'function handleJoined(msg){',
-    '  myId=msg.playerId;isHost=msg.isHost;roomCode=msg.roomCode;',
+    '  myId=msg.playerId;isHost=msg.isHost;roomCode=msg.roomCode;sessionToken=msg.sessionToken;',
     '  document.getElementById("reconnect-banner").style.display="none";',
     '  saveSession();showPhase("lobby");SFX.join();',
     '}',
@@ -527,6 +529,7 @@ function buildHTML() {
     '}',
     '',
     'function renderLobby(msg){',
+    '  syncHost(msg.players);',
     '  showPhase("lobby");',
     '  document.getElementById("lobby-code").textContent=msg.roomCode;',
     '  document.getElementById("lobby-count").textContent=msg.players.length;',
@@ -545,21 +548,23 @@ function buildHTML() {
     '    document.getElementById("lobby-leaderboard").innerHTML=renderLbRows(msg.leaderboard);',
     '  }',
     '  var ha=document.getElementById("lobby-host-area"),wa=document.getElementById("lobby-wait-area");',
-    '  if(isHost){ha.style.display="block";wa.style.display="none";document.getElementById("start-btn").disabled=msg.players.length<2;}',
+    '  if(isHost){ha.style.display="block";wa.style.display="none";document.getElementById("start-btn").disabled=msg.players.filter(function(p){return !p.disconnected;}).length<2;}',
     '  else{ha.style.display="none";wa.style.display="block";}',
     '}',
     'function startGame(){sendMsg("start_game");}',
     'function kickPlayer(id){sendMsg("kick_player",{targetId:id});}',
     'function copyCode(){',
+    '  if(!navigator.clipboard){document.getElementById("copy-btn").textContent="Kodi: "+roomCode;return;}',
     '  navigator.clipboard.writeText(document.getElementById("lobby-code").textContent).then(function(){',
     '    var b=document.getElementById("copy-btn");b.innerHTML="\u2713 Kopjuar!";',
     '    setTimeout(function(){b.innerHTML="\u29c9 Kopjo";},2000);',
-    '  });',
+    '  }).catch(function(){document.getElementById("copy-btn").textContent="Kodi: "+roomCode;});',
     '}',
     '',
     'var prevMyTurn=false;',
     'var lastHandData=null;',
     'function renderGame(state){',
+    '  syncHost(state.players);closeDrawModal();closeSeatZoom();',
     '  showPhase("game");',
     '  var ap=null;',
     '  for(var i=0;i<state.players.length;i++){if(state.players[i].id===state.activePlayerId){ap=state.players[i];break;}}',
@@ -577,6 +582,7 @@ function buildHTML() {
     '    renderMyHand(lastHandData);',
     '  }else{',
     '    lastHandData=newHand.slice();',
+    '    selectedCardIdx=null;',
     '    renderMyHand(lastHandData);',
     '  }',
     '  var gl=document.getElementById(\"game-log\");if(gl)gl.innerHTML=(state.log||[]).map(function(l){return \"<div class=\'log-item\'>\"+escHtml(l)+\"</div>\";}).join(\"\");',
@@ -584,6 +590,7 @@ function buildHTML() {
     '}',
     'function renderMsg(state){',
     '  var m=document.getElementById("game-msg");',
+    '  if(state.paused){m.className="msg-box warn";m.textContent="Lojë në pauzë: presim rilidhjen e lojtarit (deri 60 sekonda).";return;}',
     '  var df=null;',
     '  if(state.opponents){for(var i=0;i<state.opponents.length;i++){if(state.opponents[i].id===state.drawFromId){df=state.opponents[i];break;}}}',
     '  if(!state.myHand||state.myHand.length===0){m.className="msg-box success";m.textContent="\u2705 Bravo! Ke dal\u00ebt!";}',
@@ -793,16 +800,19 @@ function buildHTML() {
     'function toggleLeaderboard(){',
     '  var p=document.getElementById("lb-panel"),open=p.style.display==="none";',
     '  p.style.display=open?"block":"none";',
+    '  if(open)document.getElementById("side-panels").classList.add("open");',
     '  document.getElementById("lb-toggle-btn").textContent=open?"\u2715":"🏆";',
     '}',
     'function renderLbPanel(lb){document.getElementById("lb-content").innerHTML=renderLbRows(lb);}',
     '',
     'function renderGameOver(msg){',
+    '  syncHost(msg.players);closeDrawModal();closeSeatZoom();lastHandData=null;prevMyTurn=false;selectedCardIdx=null;',
     '  showPhase("gameover");',
     '  var isMe=msg.loserId===myId;',
     '  document.getElementById("go-emoji").textContent=isMe?"😱":"🎉";',
     '  document.getElementById("go-loser").textContent=msg.loserName;',
     '  document.getElementById("go-sub").textContent=isMe?"Ty t\u00eb ngeci Kerri!":"I ngeci Kerri!";',
+    '  if(msg.forfeit)document.getElementById("go-sub").textContent="Humbi për shkak të shkëputjes.";',
     '  if(isMe)SFX.lose();else SFX.win();',
     '  document.getElementById("go-results").innerHTML=msg.results.map(function(r){',
     '    var bc,bt;',
@@ -833,7 +843,7 @@ function buildHTML() {
     '  var div=document.createElement("div");',
     '  if(msg.system){div.className="chat-msg system";div.textContent=msg.text;}',
     '  else{div.className="chat-msg";div.innerHTML="<span class=\\"chat-sender\\">"+escHtml(msg.sender)+":</span> "+escHtml(msg.text);}',
-    '  area.appendChild(div);area.scrollTop=area.scrollHeight;',
+    '  area.appendChild(div);while(area.children.length>100)area.removeChild(area.firstChild);area.scrollTop=area.scrollHeight;',
     '}',
     '',
     'function showPhase(id){',
@@ -844,7 +854,8 @@ function buildHTML() {
     'function showError(id,msg){var el=document.getElementById(id);if(!el)return;el.textContent=msg;el.style.display="block";}',
     'function hideError(id){var el=document.getElementById(id);if(el)el.style.display="none";}',
     'function escHtml(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}',
-    'function escAttr(s){return String(s).replace(/\'/g,"&#39;").replace(/"/g,"&quot;");}',
+    'function escAttr(s){return escHtml(s).replace(/\'/g,"&#39;");}',
+    'function syncHost(players){var me=(players||[]).find(function(p){return p.id===myId;});if(me){isHost=!!me.isHost;saveSession();}}',
     '',
     'document.addEventListener("DOMContentLoaded",function(){',
     '  loadSavedUsername();',
@@ -861,7 +872,7 @@ function buildHTML() {
     '    if(sess&&sess.myId&&sess.roomCode){',
     '      myId=sess.myId;myName=sess.myName||"";isHost=sess.isHost||false;roomCode=sess.roomCode;',
     '      document.getElementById("reconnect-banner").style.display="flex";',
-    '      connectSocket(function(){sendMsg("reconnect_session",{playerId:sess.myId,roomCode:sess.roomCode});});',
+    '      connectSocket(function(){sendMsg("reconnect_session",{playerId:sess.myId,roomCode:sess.roomCode,sessionToken:sess.sessionToken});});',
     '    }',
     '  }catch(e){clearSession();}',
     '});',
@@ -877,16 +888,32 @@ const HTML = buildHTML();
 app.get('*',(req,res)=>{res.setHeader('Content-Type','text/html; charset=utf-8');res.send(HTML);});
 
 // ── Game Logic ────────────────────────────────────────────
-const rooms={},sessions={},socketToPlayer={};
+const rooms=Object.create(null),sessions=Object.create(null),socketToPlayer=Object.create(null);
+function drawSource(room, pid) {
+  const idx=room.players.findIndex(p=>p.id===pid);
+  for(let d=1;d<room.players.length;d++) {
+    const p=room.players[(idx+d)%room.players.length];
+    if((room.hands[p.id]||[]).length) return p;
+  }
+  return null;
+}
+function paused(room){return room.players.some(p=>p.disconnected&&(room.hands[p.id]||[]).length);}
+function updateHost(room){
+  if(!room.players.some(p=>p.isHost&&!p.disconnected)){
+    room.players.forEach(p=>{p.isHost=false;});
+    const next=room.players.find(p=>!p.disconnected);if(next)next.isHost=true;
+  }
+}
 const RANKS=['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
 const SUITS=['\u2660','\u2663','\u2665','\u2666'];
 const KERRI_CONFIGS={
   joker:{rank:'\u2605',suit:'\u2605'},
-
+  queen:{rank:'Q',suit:'\u2660',removedSuit:'\u2663'},
+  ace:{rank:'A',suit:'\u2665',removedSuit:'\u2666'},
 };
 function buildDeck(t){
-  const cfg=KERRI_CONFIGS[t]||KERRI_CONFIGS.joker,deck=[];
-  SUITS.forEach(s=>RANKS.forEach(r=>{if(r===cfg.rank&&s===cfg.suit)return;deck.push({rank:r,suit:s,isKerri:false,id:r+s});}));
+  const cfg=Object.hasOwn(KERRI_CONFIGS,t)?KERRI_CONFIGS[t]:KERRI_CONFIGS.joker,deck=[];
+  SUITS.forEach(s=>RANKS.forEach(r=>{if(r===cfg.rank&&(s===cfg.suit||s===cfg.removedSuit))return;deck.push({rank:r,suit:s,isKerri:false,id:r+s});}));
   deck.push({rank:cfg.rank,suit:cfg.suit,isKerri:true,id:'KERRI'});return deck;
 }
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
@@ -908,10 +935,8 @@ function sendGameState(room){
     }));
     const myHand=room.hands[player.id]||[],ap=room.players[room.activeIdx],isMT=ap&&ap.id===player.id;
     let drawFromId=null;
-    if(isMT){const mi=room.players.findIndex(p=>p.id===player.id);
-      for(let d=1;d<room.players.length;d++){const t=(mi+d)%room.players.length,tp=room.players[t];
-        if(!tp.disconnected&&room.hands[tp.id]&&room.hands[tp.id].length>0){drawFromId=tp.id;break;}}}
-    io.to(player.socketId).emit('game_state',{phase:room.phase,myHand,opponents,activePlayerId:ap?ap.id:null,isMyTurn:isMT,drawFromId,roomCode:room.code,players:room.players.map(p=>({id:p.id,name:p.name,disconnected:p.disconnected||false})),log:room.log.slice(0,8),leaderboard:getLB(room)});
+    if(isMT&&!paused(room)){const source=drawSource(room,player.id);drawFromId=source?source.id:null;}
+    io.to(player.socketId).emit('game_state',{phase:room.phase,myHand,opponents,paused:paused(room),activePlayerId:ap?ap.id:null,isMyTurn:isMT&&!paused(room),drawFromId,roomCode:room.code,players:room.players.map(p=>({id:p.id,name:p.name,isHost:p.isHost,disconnected:p.disconnected||false})),log:room.log.slice(0,8),leaderboard:getLB(room)});
   });
 }
 function sendLobbyState(room){io.to(room.code).emit('lobby_state',{roomCode:room.code,players:room.players.map(p=>({id:p.id,name:p.name,isHost:p.isHost,disconnected:p.disconnected||false})),phase:room.phase,leaderboard:getLB(room)});}
@@ -922,134 +947,155 @@ function startGame(room){
   room.players.forEach(p=>room.hands[p.id]=[]);
   deck.forEach((card,i)=>room.hands[room.players[i%room.players.length].id].push(card));
   room.players.forEach(p=>autoRemovePairs(room.hands[p.id]));
-  room.activeIdx=0;room.roundNumber=(room.roundNumber||0)+1;
-  room.log.push('Raundi '+room.roundNumber+' filloi!');sendGameState(room);
+  room.activeIdx=room.players.findIndex(p=>room.hands[p.id].length>0);room.roundNumber=(room.roundNumber||0)+1;
+  room.log.push('Raundi '+room.roundNumber+' filloi!');if(!checkGameOver(room))sendGameState(room);
 }
-function checkGameOver(room){
+function checkGameOver(room,forfeitId){
   if(room.phase==='gameover')return true;
-  const alive=room.players.filter(p=>!p.disconnected&&room.hands[p.id]&&room.hands[p.id].length>0);
-  if(alive.length>1)return false;
-  room.phase='gameover';let loserId=null;
-  room.players.forEach(p=>{if(room.hands[p.id]&&room.hands[p.id].some(c=>c.isKerri))loserId=p.id;});
+  const alive=room.players.filter(p=>room.hands[p.id]&&room.hands[p.id].length>0);
+  if(!forfeitId&&alive.length>1)return false;
+  room.phase='gameover';let loserId=forfeitId||null;
+  if(!loserId)room.players.forEach(p=>{if(room.hands[p.id]&&room.hands[p.id].some(c=>c.isKerri))loserId=p.id;});
   if(!loserId&&alive.length===1)loserId=alive[0].id;
   const loserName=room.players.find(p=>p.id===loserId)?room.players.find(p=>p.id===loserId).name:'???';
-  room.log.unshift(loserName+' i ngeci Kerri!');
+  room.log.unshift(loserName+(forfeitId?' humbi nga shkëputja.':' i ngeci Kerri!'));
   room.players.forEach(p=>{if(!room.leaderboard[p.id])room.leaderboard[p.id]={name:p.name,wins:0,losses:0,games:0};room.leaderboard[p.id].games++;if(p.id===loserId)room.leaderboard[p.id].losses++;else room.leaderboard[p.id].wins++;});
-  io.to(room.code).emit('game_over',{loserId,loserName,results:room.players.map(p=>({id:p.id,name:p.name,hasKerri:room.hands[p.id]?room.hands[p.id].some(c=>c.isKerri):false,cardCount:room.hands[p.id]?room.hands[p.id].length:0})),leaderboard:getLB(room)});
+  room.result={loserId,loserName,forfeit:!!forfeitId,players:room.players.map(p=>({id:p.id,isHost:p.isHost})),results:room.players.map(p=>({id:p.id,name:p.name,hasKerri:p.id===loserId,cardCount:room.hands[p.id]?room.hands[p.id].length:0})),leaderboard:getLB(room)};
+  io.to(room.code).emit('game_over',room.result);
   return true;
 }
 function advanceTurn(room){
   const total=room.players.length;
   let s=0;
   do{room.activeIdx=(room.activeIdx+1)%total;s++;}
-  while(s<total&&((room.hands[room.players[room.activeIdx].id]||[]).length===0||room.players[room.activeIdx].disconnected));
+  while(s<total&&(room.hands[room.players[room.activeIdx].id]||[]).length===0);
   if(s>=total){checkGameOver(room);return;}
   sendGameState(room);
 }
 
 io.on('connection',socket=>{
   const playerId=uuidv4();
-  function resolveId(){return socketToPlayer[socket.id]||playerId;}
-  socket.on('create_room',({name,kerriType})=>{
+  function resolveId(){const pid=socketToPlayer[socket.id];const sess=sessions[pid];const room=rooms[sess?sess.roomCode:null];return room&&room.players.some(p=>p.id===pid&&p.socketId===socket.id)?pid:null;}
+  function on(event,handler){socket.on(event,data=>{if(data===undefined)data={};if(!data||typeof data!=='object'||Array.isArray(data))return;handler(data);});}
+  function validName(name){return typeof name==='string'&&name.trim().length>0&&name.trim().length<=24;}
+  function joined(event,player,room){socket.emit(event,{playerId:player.id,roomCode:room.code,isHost:player.isHost,sessionToken:sessions[player.id].token});}
+  on('create_room',({name,kerriType})=>{
+    if(resolveId()||!validName(name))return;
+    name=name.trim();
     const code=makeRoomCode(),room={code,phase:'lobby',kerriType:kerriType||'joker',players:[],hands:{},activeIdx:0,log:[],leaderboard:{},roundNumber:0};
     rooms[code]=room;const player={id:playerId,name:name||'Lojtar 1',socketId:socket.id,isHost:true};
-    room.players.push(player);sessions[playerId]={name:player.name,roomCode:code,isHost:true};
+    room.players.push(player);sessions[playerId]={name:player.name,roomCode:code,token:uuidv4()};
     socketToPlayer[socket.id]=playerId;
-    socket.join(code);socket.emit('joined',{playerId,roomCode:code,isHost:true});sendLobbyState(room);
+    socket.join(code);joined('joined',player,room);sendLobbyState(room);
   });
-  socket.on('join_room',({name,roomCode:code})=>{
+  on('join_room',({name,roomCode:code})=>{
+    if(resolveId()||!validName(name)||typeof code!=='string')return;
+    name=name.trim();code=code.trim().toUpperCase();
     const room=rooms[code?code.toUpperCase():null];
     if(!room){socket.emit('error_msg',{message:'Dhoma nuk u gjet!'});return;}
     if(room.phase!=='lobby'){socket.emit('error_msg',{message:'Loja ka filluar!'});return;}
     if(room.players.length>=6){socket.emit('error_msg',{message:'Dhoma eshte plot!'});return;}
     if(room.players.some(p=>p.name.toLowerCase()===(name||'').toLowerCase())){socket.emit('error_msg',{message:'Ky emer eshte i zene!'});return;}
     const player={id:playerId,name:name||'Lojtar '+(room.players.length+1),socketId:socket.id,isHost:false};
-    room.players.push(player);sessions[playerId]={name:player.name,roomCode:code,isHost:false};
+    room.players.push(player);sessions[playerId]={name:player.name,roomCode:room.code,token:uuidv4()};
     socketToPlayer[socket.id]=playerId;
-    socket.join(code);socket.emit('joined',{playerId,roomCode:code,isHost:false});
+    socket.join(room.code);joined('joined',player,room);
     room.log.push(player.name+' u bashkua.');sendLobbyState(room);
     io.to(code).emit('chat',{text:player.name+' u bashkua!',system:true});
   });
-  socket.on('reconnect_session',({playerId:pid,roomCode:code})=>{
+  on('reconnect_session',({playerId:pid,roomCode:code,sessionToken})=>{
+    if(typeof pid!=='string'||typeof code!=='string'||(resolveId()&&resolveId()!==pid))return;
     const sess=sessions[pid];
-    const room=rooms[sess?sess.roomCode:code]||rooms[code];
+    if(!sess||typeof sessionToken!=='string'||sess.token!==sessionToken||sess.roomCode!==code){socket.emit('reconnect_failed');return;}
+    const room=rooms[sess.roomCode];
     if(!room){socket.emit('reconnect_failed');return;}
     const player=room.players.find(p=>p.id===pid);
     if(!player){socket.emit('reconnect_failed');return;}
-    player.socketId=socket.id;player.disconnected=false;
+    const oldSocket=io.sockets.sockets.get(player.socketId);
+    if(oldSocket&&oldSocket.id!==socket.id){delete socketToPlayer[oldSocket.id];oldSocket.disconnect(true);}
+    clearTimeout(player.disconnectTimer);player.socketId=socket.id;player.disconnected=false;
     socketToPlayer[socket.id]=pid;
     socket.join(room.code);
-    socket.emit('reconnected',{playerId:pid,roomCode:room.code,isHost:player.isHost});
+    joined('reconnected',player,room);
     if(room.phase==='lobby')sendLobbyState(room);else if(room.phase==='playing')sendGameState(room);
+    else socket.emit('game_over',{...room.result,players:room.players.map(p=>({id:p.id,isHost:p.isHost}))});
     io.to(room.code).emit('chat',{text:player.name+' u rilidhë!',system:true});
   });
   socket.on('start_game',()=>{
-    const sess=sessions[playerId],room=rooms[sess?sess.roomCode:null];if(!room)return;
-    const player=room.players.find(p=>p.id===playerId);
+    const pid=resolveId(),sess=sessions[pid],room=rooms[sess?sess.roomCode:null];if(!room||room.phase==='playing')return;
+    const player=room.players.find(p=>p.id===pid);
     if(!player||!player.isHost){socket.emit('error_msg',{message:'Vetem hosti!'});return;}
-    if(room.players.length<2){socket.emit('error_msg',{message:'Duhen 2+ lojtare!'});return;}
+    if(room.players.filter(p=>!p.disconnected).length<2){socket.emit('error_msg',{message:'Duhen 2+ lojtare online!'});return;}
+    room.players=room.players.filter(p=>{if(!p.disconnected)return true;clearTimeout(p.disconnectTimer);delete sessions[p.id];return false;});
     startGame(room);
   });
-  socket.on('draw_card',({fromPlayerId,cardIndex})=>{
+  on('draw_card',({fromPlayerId,cardIndex})=>{
     const pid=resolveId(),sess=sessions[pid],room=rooms[sess?sess.roomCode:null];if(!room||room.phase!=='playing')return;
-    const ap=room.players[room.activeIdx];if(ap.id!==pid){socket.emit('error_msg',{message:'Nuk eshte radha jote!'});return;}
-    const fp=room.players.find(p=>p.id===fromPlayerId);if(!fp)return;
+    const ap=room.players[room.activeIdx];if(!ap||ap.id!==pid){socket.emit('error_msg',{message:'Nuk eshte radha jote!'});return;}
+    if(paused(room))return;
+    const fp=drawSource(room,pid);if(!fp||fp.id!==fromPlayerId)return;
     const fh=room.hands[fp.id];if(!fh||fh.length===0)return;
-    if(cardIndex<0||cardIndex>=fh.length)return;
+    if(!Number.isInteger(cardIndex)||cardIndex<0||cardIndex>=fh.length)return;
     const card=fh.splice(cardIndex,1)[0];room.hands[pid].push(card);
     room.log.unshift(ap.name+' mori "'+(card.isKerri?'★ KERRI':card.rank+card.suit)+'" nga '+fp.name);
+    room.log.length=Math.min(room.log.length,50);
     io.to(room.code).emit('card_revealed',{drawerName:ap.name,fromName:fp.name,card:card});
     autoRemovePairs(room.hands[pid]);
     if(checkGameOver(room))return;
     advanceTurn(room);
   });
-  socket.on('reorder_hand',({fromIdx,toIdx})=>{
+  on('reorder_hand',({fromIdx,toIdx})=>{
     const pid=resolveId(),sess=sessions[pid],room=rooms[sess?sess.roomCode:null];if(!room||room.phase!=='playing')return;
     const hand=room.hands[pid];if(!hand)return;
-    if(fromIdx<0||fromIdx>=hand.length||toIdx<0||toIdx>=hand.length)return;
+    if(!Number.isInteger(fromIdx)||!Number.isInteger(toIdx)||fromIdx<0||fromIdx>=hand.length||toIdx<0||toIdx>=hand.length)return;
     const moved=hand.splice(fromIdx,1)[0];
     hand.splice(toIdx,0,moved);
   });
-  socket.on('chat',({text})=>{
-    const sess=sessions[playerId],room=rooms[sess?sess.roomCode:null];if(!room)return;
-    const sender=room.players.find(p=>p.id===playerId);
+  on('chat',({text})=>{
+    const pid=resolveId(),sess=sessions[pid],room=rooms[sess?sess.roomCode:null];if(!room||typeof text!=='string')return;
+    const sender=room.players.find(p=>p.id===pid);
     const t=String(text||'').slice(0,200);if(!t.trim())return;
     io.to(room.code).emit('chat',{text:t,sender:sender?sender.name:'?'});
   });
-  socket.on('kick_player',({targetId})=>{
-    const sess=sessions[playerId],room=rooms[sess?sess.roomCode:null];if(!room||room.phase!=='lobby')return;
-    const host=room.players.find(p=>p.id===playerId);if(!host||!host.isHost)return;
+  on('kick_player',({targetId})=>{
+    const pid=resolveId(),sess=sessions[pid],room=rooms[sess?sess.roomCode:null];if(!room||room.phase!=='lobby')return;
+    const host=room.players.find(p=>p.id===pid);if(!host||!host.isHost)return;
     const target=room.players.find(p=>p.id===targetId);if(!target||target.isHost)return;
     io.to(target.socketId).emit('kicked');room.players=room.players.filter(p=>p.id!==targetId);
-    delete sessions[targetId];sendLobbyState(room);
+    clearTimeout(target.disconnectTimer);delete sessions[targetId];delete socketToPlayer[target.socketId];
+    const targetSocket=io.sockets.sockets.get(target.socketId);if(targetSocket)targetSocket.leave(room.code);
+    sendLobbyState(room);
   });
   socket.on('disconnect',()=>{
     const pid=resolveId();delete socketToPlayer[socket.id];
     const sess=sessions[pid];if(!sess||!sess.roomCode)return;
     const room=rooms[sess.roomCode];if(!room)return;
     const player=room.players.find(p=>p.id===pid);if(!player)return;
-    if(room.phase==='lobby'){
-      room.players=room.players.filter(p=>p.id!==pid);delete sessions[pid];
-      if(room.players.length===0){delete rooms[sess.roomCode];return;}
-      if(!room.players.some(p=>p.isHost))room.players[0].isHost=true;
-      sendLobbyState(room);
-    }else{
+    {
       player.disconnected=true;room.log.unshift(player.name+' u shkëput.');
+      room.log.length=Math.min(room.log.length,50);
       io.to(room.code).emit('chat',{text:player.name+' u shkëput...',system:true});
       if(room.phase==='playing'){
-        if(checkGameOver(room))return;
-        const ap=room.players[room.activeIdx];
-        if(ap&&ap.id===playerId)advanceTurn(room);
-        else sendGameState(room);
+        sendGameState(room);
       }
-      setTimeout(()=>{
+      else if(room.phase==='lobby')sendLobbyState(room);
+      clearTimeout(player.disconnectTimer);
+      player.disconnectTimer=setTimeout(()=>{
         if(!player.disconnected)return;
-        room.players=room.players.filter(p=>p.id!==pid);delete sessions[pid];
-        if(room.players.length===0){delete rooms[sess.roomCode];return;}
-        if(!room.players.some(p=>p.isHost))room.players[0].isHost=true;
+        if(!room.players.some(p=>!p.disconnected)){
+          room.players.forEach(p=>{clearTimeout(p.disconnectTimer);delete sessions[p.id];});
+          delete rooms[room.code];return;
+        }
+        const activeId=room.players[room.activeIdx]?.id;
+        if(room.phase==='playing'&&(room.hands[pid]||[]).length>0){
+          updateHost(room);checkGameOver(room,pid);
+        }
+        room.players=room.players.filter(p=>p.id!==pid);delete sessions[pid];delete room.hands[pid];
+        updateHost(room);
         io.to(room.code).emit('chat',{text:player.name+' u largua.',system:true});
-        if(room.phase==='playing'){if(!checkGameOver(room))sendGameState(room);}
-        else sendLobbyState(room);
+        if(room.phase==='playing'){room.activeIdx=room.players.findIndex(p=>p.id===activeId);sendGameState(room);}
+        else if(room.phase==='lobby')sendLobbyState(room);
+        else if(room.result)io.to(room.code).emit('game_over',{...room.result,players:room.players.map(p=>({id:p.id,isHost:p.isHost}))});
       },60000);
     }
   });

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">kerri-online</string>
+    <string name="title_activity_main">kerri-online</string>
+    <string name="package_name">com.arbitrashaj.kerrigame</string>
+    <string name="custom_url_scheme">com.arbitrashaj.kerrigame</string>
+</resources>
