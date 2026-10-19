@@ -203,7 +203,7 @@ function renderMyHand(hand){
     if(isNew&&i===hand.length-1)cls+=" just-drawn";
     if(i===selectedCardIdx)cls+=" selected-card";
     var angle=n>1?(i/(n-1)-0.5)*maxAngle:0;
-    var lift=n>1?-Math.abs(angle)*0.8:0;
+    var lift=n>1?Math.abs(angle)*1.1-18:0;
     var sel=i===selectedCardIdx?" translateY(-16px)":"";
     var cardStyle="transform:rotate("+angle+"deg) translateY("+lift+"px)"+sel+";transform-origin:bottom center";
     return buildCard(card,i,cls,cardStyle);
@@ -213,7 +213,7 @@ function renderMyHand(hand){
     var cards=c.querySelectorAll(".playing-card");
     if(cards.length>1){
       var cw=cards[0].offsetWidth;
-      var avail=c.clientWidth||(window.innerWidth-16);
+      var avail=(c.clientWidth||window.innerWidth)-64;
       var totalNoOverlap=cw*cards.length;
       var overlap=0;
       if(totalNoOverlap>avail){
@@ -260,15 +260,8 @@ function showCardReveal(data){
 }
 function renderSeats(state){
   var area=document.getElementById("seats-area");if(!area)return;area.innerHTML="";
-  var pos=[
-    {t:"4%", l:"50%", x:"translateX(-50%)"},
-    {t:"22%",l:"90%", x:"translate(-50%,-50%)"},
-    {t:"80%",l:"90%", x:"translate(-50%,-50%)"},
-    {t:"80%",l:"10%", x:"translate(-50%,-50%)"},
-    {t:"22%",l:"10%", x:"translate(-50%,-50%)"},
-  ];
+  area.dataset.count=state.opponents.length;
   state.opponents.forEach(function(opp,si){
-    var p=pos[si%pos.length];
     var iD=state.isMyTurn&&opp.id===state.drawFromId&&opp.cardCount>0;
     var av="seat-avatar"+(iD?" active-seat":opp.isOut?" out-seat":opp.disconnected?" disc-seat":"");
     var n=opp.cardCount;
@@ -280,7 +273,6 @@ function renderSeats(state){
     var lbl=opp.isOut?"<span style='color:var(--green)'>&#10003;</span>":"&#127136;"+n;
     var seat=document.createElement("div");seat.className="seat";seat.id="seat-"+escAttr(opp.id);
     seat.dataset.back=opp.cardBack||'classic';
-    seat.style.cssText="top:"+p.t+";left:"+p.l+";transform:"+p.x+";position:absolute";
     var scAttrs=iD?" role='button' tabindex='0' aria-label='Zgjidh nga "+escAttr(opp.name)+"' data-id='"+escAttr(opp.id)+"' data-name='"+escAttr(opp.name)+"' data-count='"+n+"' onclick='openSeatZoom(this)' onkeydown='if(event.key===\"Enter\"||event.key===\" \"){event.preventDefault();openSeatZoom(this)}' style='cursor:pointer'":"";
     var avatar=({eagle:'♠',mountain:'▲',sun:'☀',crown:'♛'})[opp.avatar]||opp.name.charAt(0).toUpperCase();
     seat.innerHTML="<div class='"+ av +"'>"+escHtml(avatar)+"</div><div class='seat-name'>"+escHtml(opp.name)+(opp.isBot?' · Bot':'')+"</div><div class='seat-cards'"+scAttrs+">"+cards+"</div><div style='font-size:10px;color:var(--hint);text-align:center'>"+lbl+"</div>";

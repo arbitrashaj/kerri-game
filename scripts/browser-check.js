@@ -99,6 +99,9 @@ async function main(){
     await host.click('#account > button');
     await host.click('[onclick="joinWithProfile(\'practice\')"]');await host.wait('lastState?.mode==="practice"');
     assert.equal(await host.evaluate('lastState.opponents.every(p=>p.isBot)'),true);
+    await delay(350);
+    const practiceShot=await host.call('Page.captureScreenshot',{format:'png'});
+    fs.writeFileSync(path.join(artifacts,'practice.png'),Buffer.from(practiceShot.data,'base64'));
     await delay(1200);
     assert.deepEqual(errors,[],'Browser and server must have no errors');
     console.log('Browser checks passed: desktop/phone, friends/invites, readiness, two-step draw, full round, refresh, rematch, profile XP, practice. Screenshots: artifacts/.');

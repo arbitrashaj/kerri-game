@@ -159,8 +159,6 @@ button,input{touch-action:manipulation}
 #phase-game .table-felt{position:absolute;width:72.5vw;height:36.25vw;border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%);z-index:0;background:radial-gradient(ellipse at 50% 32%, rgba(255,255,255,.10) 0%, rgba(255,255,255,0) 55%),repeating-radial-gradient(circle at 50% 50%, rgba(0,0,0,.035) 0px, rgba(0,0,0,.035) 1px, transparent 1px, transparent 3px),radial-gradient(ellipse at 50% 45%, #1f6146 0%, #164a35 45%, #0f3126 75%, #0a2119 100%);box-shadow:0 0 0 4px var(--gold),inset 0 10px 34px rgba(255,255,255,.06),inset 0 -26px 60px rgba(0,0,0,.5)}
 #phase-game .table-felt::before{content:'';position:absolute;inset:-44px;border-radius:50%;z-index:-2;background:radial-gradient(ellipse at 28% 18%, rgba(255,255,255,.09) 0%, rgba(255,255,255,0) 40%),repeating-linear-gradient(102deg, rgba(0,0,0,.22) 0px, rgba(0,0,0,.22) 2px, transparent 2px, transparent 7px),linear-gradient(135deg, #4a3323 0%, #3c2a1e 45%, #2a1d14 75%, #1c130c 100%);box-shadow:0 32px 60px rgba(0,0,0,.65),0 70px 130px rgba(0,0,0,.4),inset 0 2px 5px rgba(255,255,255,.07),inset 0 -8px 16px rgba(0,0,0,.55)}
 #phase-game .table-felt::after{content:'';position:absolute;inset:-4px;border-radius:50%;z-index:-1;background:linear-gradient(135deg,#f0d78a 0%, var(--gold) 45%, #a97c1f 100%);box-shadow:inset 0 1px 2px rgba(255,255,255,.6),inset 0 -1px 3px rgba(0,0,0,.4)}
-#phase-game .table-logo{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:34%;height:34%;opacity:.09;color:var(--gold)}
-#phase-game .table-logo svg{width:100%;height:100%;fill:currentColor}
 #phase-game #seats-area{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:63vw;height:31.5vw}
 #phase-game .seat{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px}
 #phase-game .seat-avatar{width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#3c2a1e,#2a1d14);border:2px solid rgba(212,168,67,.35);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--gold);box-shadow:0 2px 8px rgba(0,0,0,.5)}
@@ -290,30 +288,49 @@ dialog .btn{margin-top:12px}.setting{display:flex;align-items:center;gap:12px;ma
 #phase-game.phase.active{height:100dvh;min-height:480px}
 #phase-game .game-topbar{flex-wrap:wrap;overflow:visible;padding:8px}
 #phase-game #game-msg{white-space:normal;font-size:14px;min-width:170px;overflow:visible;color:var(--text)}
-#phase-game .table-scene{min-height:260px}
-#phase-game .table-felt{width:min(72vw,850px);height:76%;max-height:460px;top:48%;background:radial-gradient(ellipse,#603337,#371b21)}
-#phase-game .table-felt::before{inset:-14px;background:none;border:12px solid #302326}
-#phase-game .table-felt::after{background:none;border:3px solid #ac8446}
-#phase-game #seats-area{width:min(62vw,750px);height:65%;top:43%}
+#phase-game .table-scene{min-height:300px;max-height:560px;width:min(1100px,100%);align-self:center}
+#phase-game .table-felt{width:88%;height:72%;max-height:390px;top:56%;border-radius:8px;background:radial-gradient(ellipse at 50% 35%,#c32c3a,#8b1424 85%);box-shadow:inset 0 0 70px #0005,0 24px 50px #0008}
+#phase-game .table-felt::before{inset:-18px;border-radius:12px;background:none;border:16px solid #34262a;box-shadow:0 0 0 1px #715545,0 14px 24px #0009}
+#phase-game .table-felt::after{inset:10px;border-radius:3px;background:none;border:1px solid #d0aa624d;box-shadow:none}
+#phase-game #seats-area{width:82%;height:72%;top:43%}
+#phase-game .seat{position:absolute;transform:translate(-50%,-50%);top:12%;left:50%;gap:6px}
+#phase-game .seat:nth-child(2){top:55%;left:94%}
+#phase-game .seat:nth-child(3){top:55%;left:6%}
+#phase-game #seats-area[data-count="2"] .seat:first-child{top:22%;left:25%}
+#phase-game #seats-area[data-count="2"] .seat:nth-child(2){top:22%;left:75%}
+#phase-game #seats-area[data-count="4"] .seat:first-child,#phase-game #seats-area[data-count="5"] .seat:nth-child(4){top:18%;left:18%}
+#phase-game #seats-area[data-count="4"] .seat:nth-child(4),#phase-game #seats-area[data-count="5"] .seat:nth-child(5){top:18%;left:82%}
+#phase-game .seat-avatar{background:#221c20;border:2px solid #9e7a43;box-shadow:0 6px 20px #0008}
 #phase-game .seat-name{font-size:12px;max-width:110px}
-#phase-game .seat-cards{min-height:44px}
-#phase-game .my-hand-bar{padding-bottom:max(12px,env(safe-area-inset-bottom));background:#181313}
-#phase-game .my-hand-cards{height:120px;max-width:900px;overflow-x:auto;overflow-y:hidden;justify-content:safe center}
+#phase-game .seat-cards{min-height:56px;height:56px}
+#phase-game .seat-card-back{width:29px;height:43px;background-color:#592733;border-color:#c19757;box-shadow:0 3px 6px #0006}
+#phase-game .my-hand-bar{position:relative;z-index:2;margin-top:-24px;padding-bottom:max(16px,env(safe-area-inset-bottom));background:linear-gradient(transparent,#151212 88%)}
+#phase-game .my-hand-cards{height:184px;max-width:950px;padding:36px 20px 18px;overflow-x:auto;overflow-y:hidden;justify-content:safe center}
+#phase-game .playing-card{width:86px;height:126px;border-radius:10px;box-shadow:0 8px 18px #0007;background:#fff8e9;align-items:stretch}
+#phase-game .card-tl{align-self:flex-start}#phase-game .card-br{align-self:flex-end}
+#phase-game .card-corner .rank{font-size:20px}#phase-game .card-corner .suit-sm{font-size:16px}
+#phase-game .card-center-suit{font-size:36px}
 #phase-game .leave-game-btn{min-width:44px;font-size:16px}
 #phase-game .side-panels{right:12px;left:auto;width:170px}
-body[data-table=emerald] #phase-game .table-felt{background:radial-gradient(ellipse,#265442,#122d25)}
-body[data-table=midnight] #phase-game .table-felt{background:radial-gradient(ellipse,#26374e,#151c2d)}
 #phase-game .seat[data-back=eagle] .seat-card-back{background:#702c32;color:#f6dc9a}
 #phase-game .seat[data-back=gold] .seat-card-back{background:#d4a843;color:#201707;border-color:#ffeab0}
 .reduce-motion *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 @media(max-width:800px){
-  #phase-game .table-felt{width:82vw;height:72%;top:45%}
-  #phase-game #seats-area{width:70vw;height:65%;top:39%}
+  #phase-game .table-felt{width:88%;height:65%;top:58%}
+  #phase-game #seats-area{width:76%;height:68%;top:45%}
+  #phase-game .table-scene{max-height:490px}
+  #phase-game .my-hand-cards{height:174px;padding:36px 12px 16px}
+  #phase-game .playing-card{width:76px;height:112px}
   #phase-game .seat-avatar{width:40px;height:40px;font-size:16px}
   #phase-game .seat-name{max-width:76px}
   #phase-game .side-panels{display:none}
   #phase-game .side-panels.open{display:flex;position:fixed;inset:auto 0 64px 0;width:100%;height:40dvh;background:var(--surface);padding:16px;z-index:50}
   #phase-game #chat-messages{max-height:25dvh;font-size:14px}
   .chat-toggle-btn{display:flex;position:fixed;right:12px;bottom:12px;z-index:60;width:44px;height:44px;align-items:center;justify-content:center;background:var(--gold);color:#171010;border-radius:50%}
+}
+@media(max-height:600px){
+  #phase-game.phase.active{height:auto;min-height:100dvh;overflow:visible}
+  #phase-game .table-scene{flex:none;height:300px}
+  #phase-game .my-hand-cards{height:154px}
 }
