@@ -1,14 +1,18 @@
 # Kujt i ngec Kerri
 
-Multiplayer card game served by Node.js, Express and Socket.IO. One server process holds rooms and scores in memory; restarting it clears them.
+Multiplayer card game served by Node.js, Express and Socket.IO, with a shared web/Capacitor client. Guest profiles, finished rounds, friends and participation XP persist in SQLite. Active rooms stay in memory and are interrupted by server restarts.
 
 ```sh
 npm ci --ignore-scripts
+npm run build
 npm start
 npm test
+npm run lint
 ```
 
-Open `http://localhost:3000`. Set `PORT` to change the port. Tests require Node.js 22 or newer and include real HTTP/WebSocket gameplay without extra test dependencies.
+Use Node.js 24.15 or later in the Node 24 line. Open `http://localhost:3000`. Set `PORT` to change the port. Tests include real HTTP/WebSocket gameplay and database persistence. `node scripts/browser-check.js` runs an isolated headless Chrome check with two guests and desktop/phone viewports; set `CHROME_PATH` if Chrome is installed elsewhere. Screenshots are saved in ignored `artifacts/`.
+
+Create a room or join with a code/link. Guests press **Jam gati** before the host starts. On your turn, open the highlighted opponent's hand, select a hidden card and confirm. Public quick play, practice bots, profile history, friend invitations and participation cosmetics are available from the home screen. Practice does not award XP.
 
 During a round, disconnecting a player with cards pauses play for up to 60 seconds. Reconnecting restores their hand. Expiration forfeits the round; the remaining players can start another round. Reconnecting requires the private session token saved by the browser. Sessions created before this update must join a new room.
 
@@ -16,7 +20,7 @@ The queen and ace variants remove the matching same-color card (Q♣ or A♦), l
 
 ## Android
 
-Use Java 21 for the Android build. The Capacitor project is present, but `www/index.html` is empty and no hosted game URL has been configured. Android gameplay is incomplete until a server address is supplied and the web entry point is connected to it. The web server works independently.
+Use Java 21 for the Android build. The shared client is in `www/`. Set `SERVER_URL` to your HTTPS server origin, run `npm run build:android`, then `npx cap sync android`. Native builds require a configured server URL. Hosting, signing and physical-device verification remain required. See [deployment instructions](docs/DEPLOY.md) and [the execution ledger](tasks/todo.md).
 
 ## Dependency audit
 

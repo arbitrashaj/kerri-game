@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: kerri-game
+    runtime: node
+    plan: 0.5c-512mb
+    branch: main
+    numInstances: 1
+    buildCommand: npm ci --ignore-scripts && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    disk:
+      name: kerri-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: 24.15.0
+      - key: NODE_ENV
+        value: production
+      - key: KERRI_DB
+        value: /var/data/kerri.sqlite
+      - key: ANALYTICS_ENABLED
+        value: "false"
+      - key: ALLOWED_ORIGINS
+        sync: false

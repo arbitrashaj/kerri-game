@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="sq">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="theme-color" content="#1a1a1a"/>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23702c32'/%3E%3Ctext x='32' y='49' text-anchor='middle' font-size='48' fill='%23f6dc9a'%3E%E2%99%A0%3C/text%3E%3C/svg%3E"/>
+  <title>Kujt i ngec Kerri ♠</title>
+  <script src="config.js"></script>
+  <script src="vendor/socket.io.min.js"></script>
+  <link rel="stylesheet" href="styles.css"/>
+</head>
+<body>
+
+<div id="phase-home" class="phase active">
+  <div class="home-wrap">
+    <div class="home-logo">♠</div>
+    <h1>Kujt i ngec Kerri</h1>
+    <p class="home-sub">Loja shqiptare me letra · Multiplayer Online</p>
+    <div class="card">
+      <label class="section-label" for="home-name">Emri yt</label>
+      <div class="username-row">
+        <input type="text" id="home-name" placeholder="p.sh. Ardi" maxlength="20" autocomplete="off"/>
+        <div class="username-avatar" id="home-avatar">?</div>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="goCreate()">＋ Krijo dhomë të re</button>
+    <div class="action-row">
+      <button class="btn" onclick="joinWithProfile('quick_play')">Gjej lojë publike</button>
+      <button class="btn" onclick="joinWithProfile('practice')">Praktikë me bots · pa XP</button>
+    </div>
+    <div class="divider">ose</div>
+    <div class="card">
+      <label class="section-label" for="home-code">Bashkohu me kod</label>
+      <div class="code-row">
+        <input type="text" id="home-code" placeholder="p.sh. A3BX" maxlength="4" oninput="this.value=this.value.toUpperCase()" autocomplete="off"/>
+        <button class="btn-join" onclick="goJoin()">Hyr →</button>
+      </div>
+    </div>
+    <div id="home-error" class="error-msg" style="display:none"></div>
+    <div class="action-row">
+      <button class="btn" onclick="openTutorial()">Si luhet?</button>
+      <button class="btn" onclick="openAccount()">Profili dhe miqtë</button>
+      <button class="btn" onclick="document.getElementById('settings').showModal()">Cilësimet</button>
+    </div>
+    <p class="beta-note">Beta · Raundet aktive ndërpriten kur serveri riniset.</p>
+  </div>
+</div>
+
+<div id="phase-create" class="phase">
+  <div class="home-wrap">
+    <button class="btn-back" onclick="showPhase('home')">← Kthehu</button>
+    <h2>Krijo dhomë të re</h2>
+    <div class="card">
+      <label class="section-label">Lloji i Kerrit</label>
+      <div class="kerri-options">
+        <label class="kerri-opt selected" data-val="joker">
+          <input type="radio" name="kerri" value="joker" checked hidden/>
+          <span class="ko-icon">★</span><span class="ko-label">Xholi</span>
+        </label>
+        <label class="kerri-opt" data-val="queen">
+          <input type="radio" name="kerri" value="queen" hidden/>
+          <span class="ko-icon">♠Q</span><span class="ko-label">Mbretëresha</span>
+        </label>
+        <label class="kerri-opt" data-val="ace">
+          <input type="radio" name="kerri" value="ace" hidden/>
+          <span class="ko-icon">♥A</span><span class="ko-label">Asi</span>
+        </label>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="createRoom()">Krijo dhe prit lojtarët ▶</button>
+    <div id="create-error" class="error-msg" style="display:none"></div>
+  </div>
+</div>
+
+<div id="phase-lobby" class="phase">
+  <div class="game-wrap">
+    <div class="lobby-hero">
+      <div class="lobby-label">Kodi i dhomës</div>
+      <div class="room-code" id="lobby-code">----</div>
+      <button class="btn-copy" onclick="copyCode()" id="copy-btn">⧉ Kopjo</button>
+      <button class="btn-copy" onclick="shareRoom()">Ndaj ftesën</button>
+      <button class="btn-copy" onclick="openAccount()">Fto miqtë</button>
+    </div>
+    <div class="card">
+      <div class="section-label">Lojtarët (<span id="lobby-count">1</span>/6)</div>
+      <div id="lobby-players"></div>
+    </div>
+    <div id="lobby-lb-wrap" style="display:none">
+      <div class="card">
+        <div class="section-label">🏆 Leaderboard</div>
+        <div id="lobby-leaderboard"></div>
+      </div>
+    </div>
+    <div id="lobby-host-area" style="display:none">
+      <button class="btn btn-primary" id="start-btn" onclick="startGame()" disabled>Fillo lojën ▶</button>
+      <p class="lobby-hint center">Duhen të paktën 2 lojtarë</p>
+    </div>
+    <div id="lobby-wait-area" style="display:none">
+      <button class="btn btn-primary" id="ready-btn" onclick="toggleReady()">Jam gati</button>
+      <div class="msg-box warn">⏳ Duke pritur hostin...</div>
+    </div>
+    <button class="btn btn-secondary" onclick="leaveGame()" style="margin-top:1rem">Dil nga loja</button>
+  </div>
+</div>
+
+<div id="phase-game" class="phase">
+  <div class="game-wrap">
+    <div class="game-topbar">
+      <div class="chip" id="chip-turn">\u2014</div>
+      <div class="chip" id="chip-room">\u2014</div>
+      <div id="game-msg" class="msg-box" role="status">Duke pritur...</div>
+      <button class="chip chip-btn" onclick="toggleLeaderboard()" id="lb-toggle-btn">&#127942;</button>
+    </div>
+    <div class="table-scene">
+      <div class="table-felt"><div class="table-logo"><svg viewBox="0 0 100 100"><path d="M50 10 L58 30 L80 26 L64 42 L86 50 L64 58 L80 74 L58 70 L50 90 L42 70 L20 74 L36 58 L14 50 L36 42 L20 26 L42 30 Z"/></svg></div></div>
+      <div id="seats-area"></div>
+      <div id="opponents-area" style="display:none"></div>
+    </div>
+    <button id="chat-toggle-btn" class="chat-toggle-btn" onclick="toggleChatPanel()">&#128172;</button>
+    <div class="side-panels" id="side-panels">
+      <div id="lb-panel" class="lb-panel" style="display:none"><div class="lb-title">&#127942; Leaderboard</div><div id="lb-content"></div></div>
+      <div class="chat-area" style="flex:1"><div id="chat-messages"></div><div class="chat-input-row"><input type="text" id="chat-input" placeholder="Chat..." onkeydown="if(event.key==='Enter')sendChat()" maxlength="200"/><button class="btn-send" onclick="sendChat()">&#10148;</button></div></div>
+    </div>
+    <div class="my-hand-bar">
+      <div class="my-hand-cards" id="my-hand"></div>
+      <div class="my-hand-top"><span class="my-name-chip" id="my-name-chip">Ti</span><span class="hand-count" id="my-hand-count"></span><button class="leave-game-btn" onclick="leaveGame()">&#128682;</button></div>
+    </div>
+  </div>
+</div>
+
+<div id="phase-gameover" class="phase">
+  <div class="home-wrap">
+    <div class="go-emoji" id="go-emoji">😱</div>
+    <div class="go-loser" id="go-loser"></div>
+    <div class="go-sub" id="go-sub"></div>
+    <div class="card" style="margin-bottom:1rem">
+      <div class="section-label">Rezultatet</div>
+      <div id="go-results"></div>
+    </div>
+    <div class="card" id="go-lb-card" style="display:none">
+      <div class="section-label">🏆 Leaderboard total</div>
+      <div id="go-leaderboard"></div>
+    </div>
+    <div id="go-host-btns" style="display:none">
+      <button class="btn btn-primary" onclick="playAgain()">Raundi tjetër ▶</button>
+    </div>
+    <div id="go-wait-btns" style="display:none">
+      <div class="msg-box warn">⏳ Duke pritur hostin...</div>
+    </div>
+    <button class="btn btn-secondary" onclick="leaveGame()">Dil nga loja</button>
+  </div>
+</div>
+
+<div id="draw-modal" class="modal-overlay" style="display:none" onclick="handleModalOutsideClick(event)">
+  <div class="modal-box">
+    <div class="modal-title" id="modal-title">Zgjedh një letër</div>
+    <div class="modal-subtitle">Klikoni një kartë për ta marrë!</div>
+    <div class="cards-row" id="modal-cards" style="justify-content:center;margin:1rem 0;gap:8px"></div>
+    <button class="btn btn-secondary" onclick="closeDrawModal()">Anulo</button>
+  </div>
+</div>
+
+<div id="reconnect-banner" style="display:none">
+  <div class="reconnect-inner">
+    <div class="reconnect-spinner"></div>
+    <span>Duke u rilidhur...</span>
+  </div>
+</div>
+
+<dialog id="tutorial" aria-labelledby="tutorial-title">
+  <h2 id="tutorial-title">Një letër. Një hap më afër daljes.</h2>
+  <ol class="instructions">
+    <li>Çiftet me të njëjtën vlerë hiqen automatikisht.</li>
+    <li>Në radhën tënde, prek dorën e lojtarit të ndriçuar. Zgjidh një letër të fshehur, pastaj konfirmo.</li>
+    <li>Kur nuk ke më letra, ke dalë. Lojtari i fundit me Kerrin humbet.</li>
+  </ol>
+  <p>Renditja shpërblen pjesëmarrjen, jo aftësinë. Praktika me bots nuk jep XP.</p>
+  <button class="btn btn-primary" onclick="finishTutorial()">E kuptova</button>
+</dialog>
+<dialog id="settings" aria-labelledby="settings-title">
+  <h2 id="settings-title">Cilësimet</h2>
+  <label class="setting"><input id="sound-setting" type="checkbox" onchange="saveSettings()"/> Tinguj</label>
+  <label class="setting"><input id="motion-setting" type="checkbox" onchange="saveSettings()"/> Lëvizje të reduktuara</label>
+  <button class="btn" onclick="document.getElementById('settings').close()">Mbyll</button>
+</dialog>
+<dialog id="account" aria-labelledby="account-title">
+  <h2 id="account-title">Profili dhe miqtë</h2>
+  <div id="account-content"></div>
+  <p id="account-error" role="status"></p>
+  <button class="btn" onclick="document.getElementById('account').close()">Mbyll</button>
+</dialog>
+<dialog id="pick-card" aria-labelledby="pick-title">
+  <h2 id="pick-title">Zgjidh një letër</h2>
+  <div id="pick-options" class="pick-options"></div>
+  <button id="pick-confirm" class="btn btn-primary" disabled onclick="commitPick()">Merr letrën</button>
+  <button class="btn" onclick="closeSeatZoom()">Anulo</button>
+</dialog>
+<script src="app.js"></script>
+<script src="beta.js"></script>
+</body>
+</html>

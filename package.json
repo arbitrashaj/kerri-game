@@ -5,8 +5,12 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "lint": "node scripts/check.js",
+    "build": "node scripts/build.js",
+    "build:android": "node scripts/build.js --native"
   },
+  "engines": { "node": ">=24.15.0 <25" },
   "dependencies": {
     "@capacitor/android": "^8.5.3",
     "@capacitor/core": "^8.5.3",

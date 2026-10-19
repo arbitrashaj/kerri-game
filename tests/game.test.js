@@ -9,26 +9,97 @@ function game() {
   const sockets = new Map(), timers = new Set();
   let connect, nextId = 0;
   const io = { on: (_, fn) => { connect = fn; }, sockets: { sockets },
-    to: () => ({ emit() {} }) };
-  const context = vm.createContext({ io, uuidv4: () => `id-${++nextId}`,
+    to: target => ({ emit(e,data) { for(const s of sockets.values()) if(s.id===target || s.rooms.has(target)) s.emit(e,structuredClone(data)); } }) };
+  const context = vm.createContext({ io, console, process, randomInt: require('node:crypto').randomInt, store: { authenticate: () => null, recordRound: () => false, metric() {} }, uuidv4: () => `id-${++nextId}`,
     setTimeout: fn => { timers.add(fn); return fn; }, clearTimeout: fn => timers.delete(fn) });
   vm.runInContext(source.slice(source.indexOf('const rooms='), source.indexOf('server.listen(')) +
     ';globalThis.state={rooms,sessions,startGame,checkGameOver,buildDeck,autoRemovePairs};', context);
   function socket() {
     const handlers = {}, events = [];
     const s = { id: `socket-${++nextId}`, events, on: (e, f) => { handlers[e] = f; },
-      emit: (e, data) => events.push({ e, data }), join() {}, leave() {},
-      disconnect() { handlers.disconnect(); },
+      rooms: new Set(), emit: (e, data) => events.push({ e, data }), join(r) { this.rooms.add(r); }, leave(r) { this.rooms.delete(r); },
+      disconnect() { handlers.disconnect(); this.rooms.clear(); },
       send(e, data) { handlers[e](data); },
       last(e) { return events.filter(x => x.e === e).at(-1)?.data; } };
     sockets.set(s.id, s); connect(s); return s;
   }
   const host = socket(); host.send('create_room', { name: 'Host' });
   const joined = host.last('joined'), room = context.state.rooms[joined.roomCode];
-  function join(name) { const s = socket(); s.send('join_room', { name, roomCode: room.code }); return s; }
+  function join(name) { const s = socket(); s.send('join_room', { name, roomCode: room.code }); s.send('set_ready',{ready:true}); return s; }
   return { ...context.state, host, joined, room, join, socket,
     expire() { for (const fn of [...timers]) { timers.delete(fn); fn(); } } };
 }
+
+function draw(g) {
+  const state=g.room, source=state.players[(state.activeIdx+1)%state.players.length];
+  return {actionId:require('node:crypto').randomUUID(),roundId:state.roundId,turnVersion:state.turnVersion,sourceVersion:state.handVersions[source.id],fromPlayerId:source.id,cardIndex:0};
+}
+
+test('readiness prevents starting before guests consent', () => {
+  const g=game(), guest=g.socket();
+  guest.send('join_room',{name:'Unready',roomCode:g.room.code});
+  g.host.send('start_game'); assert.equal(g.room.phase,'lobby');
+  guest.send('set_ready',{ready:true});
+  g.host.send('start_game'); assert.equal(g.room.phase,'playing');
+});
+
+test('public queue starts after readiness and practice bots take real turns', () => {
+  const g=game();g.host.send('leave_room');
+  g.host.send('quick_play',{name:'Host'});
+  const room=g.rooms[g.host.last('joined').roomCode];
+  assert.equal(room.isPublic,true);
+  const guest=g.socket();guest.send('quick_play',{name:'Guest'});
+  assert.equal(guest.last('joined').roomCode,room.code);assert.equal(room.phase,'lobby');
+  guest.send('set_ready',{ready:true});assert.equal(room.phase,'playing');
+  const practice=g.socket();practice.send('practice',{name:'Practice'});
+  const training=g.rooms[practice.last('joined').roomCode];
+  assert.equal(training.mode,'practice');assert.equal(training.players.filter(p=>p.isBot).length,2);
+  const [human,bot,other]=training.players;
+  training.phase='playing';training.activeIdx=1;
+  training.hands={[human.id]:[{id:'2',rank:'2'}],[bot.id]:[{id:'3',rank:'3'}],[other.id]:[{id:'KERRI',isKerri:true,rank:'*'}]};
+  practice.send('resync_state');const version=training.turnVersion;
+  g.expire();assert.equal(training.turnVersion,version+1);
+  assert.equal(practice.last('card_revealed'),undefined);
+});
+
+test('stale and repeated draws cannot mutate hands twice or disclose cards', () => {
+  const g=game(), guest=g.join('Guest');g.startGame(g.room);
+  const [a,b]=g.room.players;
+  g.room.activeIdx=0;g.room.phase='playing';
+  g.room.hands={[a.id]:[{id:'2S',rank:'2'}],[b.id]:[{id:'3S',rank:'3'},{id:'KERRI',rank:'*',isKerri:true}]};
+  const payload=draw(g), before=JSON.stringify(g.room.hands);
+  g.host.send('draw_card',{...payload,turnVersion:-1});
+  assert.equal(JSON.stringify(g.room.hands),before);assert.ok(g.host.last('action_error'));
+  g.host.send('draw_card',payload);
+  const after=JSON.stringify(g.room.hands);assert.notEqual(after,before);
+  g.host.send('draw_card',payload);assert.equal(JSON.stringify(g.room.hands),after);
+  assert.ok(g.host.last('card_revealed').card);
+  assert.equal(guest.last('card_revealed'),undefined);
+  assert.equal(guest.last('card_drawn').card,undefined);
+  assert.ok(guest.last('game_state').opponents.every(p=>!p.hand&&!p.cards));
+  assert.ok(!JSON.stringify(guest.last('game_state').log).includes('3S'));
+});
+
+test('leaving transfers host immediately and removes empty rooms', () => {
+  const g=game(), guest=g.join('Guest');
+  g.host.send('leave_room');
+  assert.equal(g.room.players.length,1);assert.equal(g.room.players[0].isHost,true);
+  assert.equal(g.sessions[g.joined.playerId],undefined);
+  guest.send('leave_room');assert.equal(g.rooms[g.room.code],undefined);
+});
+
+test('expired session tokens cannot reclaim a player', () => {
+  const g=game();g.sessions[g.joined.playerId].expiresAt=Date.now()-1;
+  const attacker=g.socket();attacker.send('reconnect_session',g.joined);
+  assert.ok(attacker.events.some(e=>e.e==='reconnect_failed'));
+});
+
+test('room events and hidden hands stay isolated', () => {
+  const g=game();g.join('Guest');
+  const outsider=g.socket();outsider.send('create_room',{name:'Other'});
+  outsider.events.length=0;g.host.send('chat',{text:'private room'});g.startGame(g.room);
+  assert.equal(outsider.events.length,0);
+});
 
 test('malformed events cannot crash the server', () => {
   const g = game(), s = g.socket();
@@ -62,17 +133,18 @@ test('reconnection requires a private token, and the host retains controls', () 
 test('draws enforce the next opponent and integer indices', () => {
   const g = game(); g.join('B'); g.join('C');
   const [a,b,c] = g.room.players;
+  g.startGame(g.room);
   const card = rank => ({ rank, suit: 'S', id: rank, isKerri: false });
-  g.room.phase = 'playing'; g.room.hands = { [a.id]: [card('2')], [b.id]: [card('3')], [c.id]: [card('4')] };
+  g.room.phase = 'playing'; g.room.activeIdx=0; g.room.hands = { [a.id]: [card('2')], [b.id]: [card('3')], [c.id]: [card('4')] };
   for (const cardIndex of [undefined, null, '0', 0.5, -1, NaN]) {
-    g.host.send('draw_card', { fromPlayerId: b.id, cardIndex });
+    g.host.send('draw_card', { ...draw(g), fromPlayerId: b.id, cardIndex });
     assert.equal(g.room.hands[b.id].length, 1);
   }
   for (const fromPlayerId of [a.id, c.id]) {
-    g.host.send('draw_card', { fromPlayerId, cardIndex: 0 });
+    g.host.send('draw_card', { ...draw(g), fromPlayerId, cardIndex: 0 });
     assert.equal(g.room.hands[fromPlayerId].length, 1);
   }
-  g.host.send('draw_card', { fromPlayerId: b.id, cardIndex: 0 });
+  g.host.send('draw_card', { ...draw(g), fromPlayerId: b.id, cardIndex: 0 });
   assert.equal(g.room.hands[b.id].length, 0);
 });
 
@@ -90,8 +162,19 @@ test('reorder rejects missing and fractional indices', () => {
   const g = game(); g.join('Guest'); g.host.send('start_game');
   g.room.hands[g.joined.playerId] = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
   const before = JSON.stringify(g.room.hands);
-  for (const fromIdx of [undefined, null, '0', 0.5]) g.host.send('reorder_hand', { fromIdx, toIdx: 0 });
+  for (const fromIdx of [undefined, null, '0', 0.5]) g.host.send('reorder_hand', { fromIdx, toIdx: 0,roundId:g.room.roundId,handVersion:g.room.handVersions[g.joined.playerId],actionId:require('node:crypto').randomUUID() });
   assert.equal(JSON.stringify(g.room.hands), before);
+});
+
+test('reordering invalidates a previously selected source card', () => {
+  const g=game(), guest=g.join('Guest');g.startGame(g.room);
+  const [a,b]=g.room.players;g.room.activeIdx=0;g.room.phase='playing';
+  g.room.hands={[a.id]:[{id:'2S',rank:'2'}],[b.id]:[{id:'3S',rank:'3'},{id:'KERRI',rank:'*',isKerri:true}]};
+  const oldSelection=draw(g);
+  guest.send('reorder_hand',{fromIdx:0,toIdx:1,roundId:g.room.roundId,handVersion:g.room.handVersions[b.id],actionId:require('node:crypto').randomUUID()});
+  assert.equal(g.room.hands[b.id][0].id,'KERRI');
+  const before=JSON.stringify(g.room.hands);g.host.send('draw_card',oldSelection);
+  assert.equal(JSON.stringify(g.room.hands),before);assert.ok(g.host.last('action_error'));
 });
 
 test('each Kerri type leaves exactly one unpaired special card', () => {
@@ -150,33 +233,4 @@ test('deal selects a nonempty hand and completes an already finished deal', () =
     if (g.room.phase === 'playing') assert.ok(g.room.hands[g.room.players[g.room.activeIdx].id].length);
     else assert.equal(g.room.phase, 'gameover');
   }
-});
-
-test('generated client renders valid HTML attributes and handles reconnect only once', () => {
-  const source = fs.readFileSync(require.resolve('../server.js'), 'utf8');
-  const html = vm.runInNewContext(source.slice(source.indexOf('function buildHTML()'), source.indexOf('const HTML =')) + ';buildHTML()');
-  const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-  new vm.Script(script);
-  const elements = new Map();
-  const document = { addEventListener() {}, getElementById(id) {
-    if (!elements.has(id)) elements.set(id, { style: { display: 'none' }, classList: { add() {}, remove() {} } });
-    return elements.get(id);
-  }, querySelectorAll: () => [] };
-  const handlers = {}, sent = [];
-  const client = { connected: false, on(e, fn) { handlers[e] = fn; }, emit: (...args) => sent.push(args) };
-  const store = new Map();
-  const ctx = vm.createContext({ document, window: { scrollTo() {} }, io: () => client,
-    localStorage: { getItem: k => store.get(k), setItem: (k,v) => store.set(k,v) },
-    setTimeout() {}, requestAnimationFrame() {} });
-  vm.runInContext(script, ctx);
-  assert.doesNotMatch(ctx.renderLbRows([{ name: 'A', wins: 0, losses: 0 }]), /\\"/);
-  ctx.SFX = { join() {} };
-  ctx.renderLobby({ roomCode: 'ABCD', players: [{ id: 'me', name: 'Me', isHost: true }] });
-  assert.doesNotMatch(elements.get('lobby-players').innerHTML, /\\"/);
-  ctx.connectSocket(() => sent.push(['create_room']));
-  handlers.connect();
-  ctx.handleJoined({ playerId: 'me', roomCode: 'ABCD', isHost: true, sessionToken: 'private' });
-  handlers.connect();
-  assert.equal(sent.filter(x => x[0] === 'create_room').length, 1);
-  assert.equal(sent.filter(x => x[0] === 'reconnect_session').length, 1);
 });

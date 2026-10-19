@@ -5,890 +5,85 @@ const express = require('express');
 const http    = require('http');
 const path    = require('path');
 const { Server } = require('socket.io');
-const { randomUUID: uuidv4 } = require('node:crypto');
+const { randomUUID: uuidv4, randomInt } = require('node:crypto');
+const { createStore } = require('./server/store');
+const store = createStore(process.env.KERRI_DB || path.join(__dirname,'data/kerri.sqlite'), {
+  analyticsEnabled: process.env.ANALYTICS_ENABLED === 'true',
+});
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'https://localhost,capacitor://localhost').split(',').map(s=>s.trim());
+function acceptsOrigin(origin,host) {
+  if(!origin || allowedOrigins.includes(origin))return true;
+  try { const url=new URL(origin);return ['http:','https:'].includes(url.protocol)&&url.host===host; } catch {return false;}
+}
 
 const app    = express();
-app.use('/assets', express.static(path.join(__dirname, 'assets')));
+app.disable('x-powered-by');
+app.use((req,res,next)=>{
+  res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','same-origin');
+  res.setHeader('X-Frame-Options','DENY');
+  if(req.headers.origin){
+    if(!acceptsOrigin(req.headers.origin,req.headers.host))return res.status(403).json({message:'Origjinë e palejuar.'});
+    res.setHeader('Access-Control-Allow-Origin',req.headers.origin);res.setHeader('Vary','Origin');
+    res.setHeader('Access-Control-Allow-Headers','Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Methods','GET, POST, PATCH, OPTIONS');
+  }
+  if(req.method==='OPTIONS')return res.sendStatus(204);
+  next();
+});
+app.use('/api',express.json({limit:'4kb'}),(req,res,next)=>{
+  res.setHeader('Cache-Control','no-store');
+  if(!consumeLimit('http:'+req.socket.remoteAddress,120,60000))return res.status(429).json({message:'Shumë kërkesa. Provo pas pak.'});
+  next();
+});
 const server = http.createServer(app);
 const io     = new Server(server, {
-  cors: { origin: '*' },
+  cors: { origin: (origin,cb)=>cb(null,origin||false) },
+  allowRequest: (req,cb)=>cb(null,acceptsOrigin(req.headers.origin,req.headers.host)),
+  maxHttpBufferSize: 8192,
   transports: ['websocket', 'polling'],
 });
 const PORT = process.env.PORT || 3000;
 
-// HTML is stored in a separate variable built safely
-function buildHTML() {
-  return [
-    '<!DOCTYPE html>',
-    '<html lang="sq">',
-    '<head>',
-    '  <meta charset="UTF-8"/>',
-    '  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>',
-    '  <meta name="theme-color" content="#1a1a1a"/>',
-    '  <title>Kujt i ngec Kerri \u2660</title>',
-    '  <script src="/socket.io/socket.io.js"><\/script>',
-    '  <style>',
-    '*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}',
-    ':root{',
-    '  --bg:#0f0f17;--surface:#1a1a2e;--border:rgba(255,255,255,.08);--border-mid:rgba(255,255,255,.15);',
-    '  --text:#f0e6c8;--muted:#9a8fa0;--hint:#5a5468;',
-    '  --r-md:10px;--r-lg:16px;--r-xl:22px;',
-    '  --red:#e05555;--red-bg:rgba(224,85,85,.15);--blue:#5b8dee;--blue-bg:rgba(91,141,238,.15);',
-    '  --green:#4caf7d;--green-bg:rgba(76,175,125,.15);--amber:#c8852a;--amber-bg:rgba(200,133,42,.15);',
-    '  --kerri:#e8325a;--kerri-bg:rgba(232,50,90,.15);--kerri-br:#e8325a;',
-    '  --purple:#9b72e8;--purple-bg:rgba(155,114,232,.15);--gold:#d4a843;--gold-bg:rgba(212,168,67,.15);',
-    '  --shadow-sm:0 2px 8px rgba(0,0,0,.4);--shadow-md:0 6px 24px rgba(0,0,0,.6);',
-    '}',
-    'body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}',
-    '.phase{display:none}.phase.active{display:block;animation:fadeIn .2s ease}',
-    '@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}',
-    '.home-wrap{max-width:440px;margin:0 auto;padding:2rem 1rem 4rem}',
-    '.game-wrap{max-width:680px;margin:0 auto;padding:.75rem .75rem 2rem}',
-    '.home-logo{font-size:56px;text-align:center;margin-bottom:.5rem}',
-    'h1{font-size:26px;font-weight:700;text-align:center;letter-spacing:-.5px;color:var(--gold)}',
-    'h2{font-size:20px;font-weight:600;margin-bottom:1rem}',
-    '.home-sub{font-size:13px;color:var(--muted);text-align:center;margin:4px 0 1.5rem}',
-    '.card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:1.1rem 1.15rem;margin-bottom:.85rem;box-shadow:var(--shadow-sm)}',
-    '.section-label{display:block;font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:500;text-transform:uppercase;letter-spacing:.4px}',
-    '.username-row{display:flex;gap:8px;align-items:center}',
-    '.username-avatar{width:40px;height:40px;flex-shrink:0;background:#1a1a1a;color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600}',
-    'input[type=text],select{width:100%;padding:10px 13px;border:.5px solid var(--border-mid);border-radius:var(--r-md);font-size:15px;background:rgba(0,0,0,.3);color:var(--text);font-family:inherit;outline:none;-webkit-appearance:none}',
-    'input:focus,select:focus{border-color:#94a3b8;box-shadow:0 0 0 3px rgba(99,102,241,.1)}',
-    '.code-row{display:flex;gap:8px}',
-    '.code-row input{text-transform:uppercase;letter-spacing:4px;font-size:18px;font-weight:700;text-align:center}',
-    '.kerri-options{display:flex;gap:8px}',
-    '.kerri-opt{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 8px;border:1.5px solid var(--border-mid);border-radius:var(--r-md);cursor:pointer;transition:border-color .15s,background .15s}',
-    '.kerri-opt:hover{background:var(--bg)}',
-    '.kerri-opt.selected{border-color:#1a1a1a;background:#f8f8f8}',
-    '.ko-icon{font-size:20px;font-weight:700}',
-    '.ko-label{font-size:12px;color:var(--muted)}',
-    '.btn{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;padding:12px 16px;border-radius:var(--r-md);border:.5px solid var(--border-mid);background:var(--surface);font-size:15px;cursor:pointer;color:var(--text);font-family:inherit;text-align:center;transition:background .12s,transform .08s}',
-    '.btn:hover{background:var(--bg)}.btn:active{transform:scale(.98)}',
-    '.btn-primary{font-weight:600;font-size:16px;padding:14px;border-radius:var(--r-lg);background:linear-gradient(135deg,#c8852a,#d4a843);color:#0f0f17;border-color:#d4a843;margin-bottom:4px;box-shadow:0 4px 16px rgba(212,168,67,.35)}',
-    '.btn-primary:hover{background:linear-gradient(135deg,#d4a843,#e0b84e)}',
-    '.btn-primary:disabled{background:#999;border-color:#999;cursor:not-allowed;transform:none}',
-    '.btn-secondary{margin-top:8px;color:var(--muted)}',
-    '.btn-back{background:none;border:none;font-size:14px;color:var(--muted);cursor:pointer;margin-bottom:1rem;padding:0;font-family:inherit;display:flex;align-items:center;gap:4px}',
-    '.btn-back:hover{color:var(--text)}',
-    '.btn-join{padding:10px 20px;border-radius:var(--r-md);border:.5px solid var(--border-mid);background:var(--surface);font-size:15px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:inherit}',
-    '.btn-join:hover{background:var(--bg)}',
-    '.divider{text-align:center;font-size:13px;color:var(--hint);margin:1rem 0;position:relative}',
-    ".divider::before,.divider::after{content:'';position:absolute;top:50%;width:38%;height:.5px;background:var(--border-mid)}",
-    '.divider::before{left:0}.divider::after{right:0}',
-    '.error-msg{background:var(--red-bg);color:var(--red);border-radius:var(--r-md);padding:10px 14px;font-size:14px;margin-top:8px;border:.5px solid #fecaca}',
-    '.lobby-hero{text-align:center;margin-bottom:1rem;padding:1.5rem 1rem;background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:var(--r-lg);border:.5px solid rgba(212,168,67,.3);box-shadow:var(--shadow-sm)}',
-    '.lobby-label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}',
-    '.room-code{font-size:46px;font-weight:800;letter-spacing:8px;color:var(--gold);line-height:1;margin-bottom:12px}',
-    '.lobby-hint{font-size:12px;color:var(--hint);margin-top:4px}',
-    '.lobby-hint.center{text-align:center}',
-    '.btn-copy{display:inline-flex;align-items:center;gap:6px;padding:8px 18px;border-radius:var(--r-md);border:.5px solid var(--border-mid);background:var(--bg);font-size:13px;cursor:pointer;font-family:inherit}',
-    '.btn-copy:hover{background:#e5e3de}',
-    '.lobby-player-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:.5px solid var(--border);font-size:14px}',
-    '.lobby-player-row:last-child{border:none}',
-    '.player-dot{width:9px;height:9px;border-radius:50%;background:#22c55e;flex-shrink:0}',
-    '.player-dot.offline{background:#d1d5db}',
-    '.player-name-col{flex:1}',
-    '.host-badge{font-size:11px;background:var(--gold-bg);color:var(--gold);border-radius:99px;padding:2px 8px}',
-    '.kick-btn{background:none;border:.5px solid var(--border-mid);border-radius:6px;padding:3px 8px;font-size:12px;color:var(--muted);cursor:pointer}',
-    '.kick-btn:hover{background:var(--red-bg);color:var(--red);border-color:#fecaca}',
-    '.lb-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:.5px solid var(--border);font-size:13px}',
-    '.lb-row:last-child{border:none}',
-    '.lb-rank{width:22px;text-align:center;font-weight:700;color:var(--muted)}',
-    '.lb-rank.gold{color:#d97706}.lb-rank.silver{color:#6b7280}.lb-rank.bronze{color:#92400e}',
-    '.lb-name{flex:1;font-weight:500}',
-    '.lb-stats{display:flex;gap:6px}',
-    '.lb-win{font-size:12px;background:var(--green-bg);color:var(--green);border-radius:99px;padding:2px 8px;font-weight:500}',
-    '.lb-loss{font-size:12px;background:var(--red-bg);color:var(--red);border-radius:99px;padding:2px 8px;font-weight:500}',
-    '.lb-panel{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:1rem;margin-bottom:.85rem;box-shadow:var(--shadow-sm)}',
-    '.lb-title{font-size:13px;font-weight:600;margin-bottom:8px}',
-    '.game-topbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:.75rem;align-items:center}',
-    '.chip{background:var(--surface);border:.5px solid var(--border);border-radius:99px;padding:5px 13px;font-size:13px;color:var(--muted);box-shadow:var(--shadow-sm)}',
-    '.chip span{font-weight:600;color:var(--text)}',
-    '.chip.my-turn{background:linear-gradient(135deg,#c8852a,#d4a843);color:#0f0f17;border-color:#d4a843;font-weight:600}',
-    '.chip-btn{cursor:pointer;border:.5px solid var(--border-mid);padding:5px 11px}',
-    '.chip-btn:hover{background:var(--bg)}',
-    '.msg-box{border-radius:var(--r-md);padding:10px 14px;font-size:14px;margin-bottom:.85rem;background:var(--blue-bg);color:var(--blue);border:.5px solid #bfdbfe}',
-    '.msg-box.warn{background:var(--amber-bg);color:var(--amber);border-color:#fde68a}',
-    '.msg-box.success{background:var(--green-bg);color:var(--green);border-color:#bbf7d0}',
-    '#opponents-area{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:.9rem;margin-bottom:.85rem;box-shadow:var(--shadow-sm)}',
-    '.opp-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:.5px solid var(--border)}',
-    '.opp-row:last-child{border:none}',
-    '.opp-info{min-width:90px}',
-    '.opp-name{font-size:14px;font-weight:600;display:flex;align-items:center;gap:5px;flex-wrap:wrap}',
-    '.opp-name .disc-tag{font-size:11px;background:#f3f4f6;color:#9ca3af;border-radius:99px;padding:1px 7px}',
-    '.opp-meta{font-size:12px;color:var(--hint);margin-top:2px}',
-    '.opp-cards{display:flex;flex-wrap:wrap;gap:4px;flex:1}',
-    '.card-back{display:inline-flex;align-items:center;justify-content:center;width:38px;height:54px;border-radius:7px;border:.5px solid rgba(212,168,67,.4);background:linear-gradient(135deg,#3c2a1e,#2a1d14);font-size:15px;font-weight:800;color:var(--gold);transition:transform .12s,box-shadow .12s;user-select:none}',
-    '.card-back.drawable{cursor:pointer;border-color:#d4a843;animation:pulse-glow .9s ease-in-out infinite alternate;box-shadow:0 0 0 2px rgba(212,168,67,.2)}',
-    '.card-back.drawable:hover{transform:translateY(-7px) scale(1.05);box-shadow:0 6px 16px rgba(212,168,67,.3)}',
-    '@keyframes pulse-glow{from{border-color:#d4a843;box-shadow:0 0 0 2px rgba(212,168,67,.15)}to{border-color:#e0b84e;box-shadow:0 0 0 4px rgba(212,168,67,.05)}}',
-    '.card-back.not-my-turn{opacity:.45}',
-    '.card-back.disc{opacity:.25;pointer-events:none}',
-    '.hand-area{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:.9rem;margin-bottom:.85rem;min-height:108px;box-shadow:var(--shadow-sm)}',
-    '.hand-label{font-size:12px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:6px;text-transform:uppercase;letter-spacing:.4px;font-weight:500}',
-    '.hand-count{font-weight:700;color:var(--text);background:var(--bg);border-radius:99px;padding:1px 8px;font-size:12px}',
-    '.cards-row{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-end}',
-    '.playing-card{display:flex;flex-direction:column;align-items:center;justify-content:center;width:66px;height:96px;border-radius:8px;border:none;background:#f4ede0;user-select:none;box-shadow:0 2px 8px rgba(0,0,0,.35),0 1px 2px rgba(0,0,0,.2);position:relative;flex-shrink:0}',
-    '.playing-card .rank{font-size:16px;font-weight:800;line-height:1;font-family:Georgia,serif}',
-    '.playing-card .suit{font-size:18px;line-height:1;margin-top:1px}',
-    '.playing-card.red-card .rank,.playing-card.red-card .suit{color:#cc0000}',
-    '.playing-card.black-card .rank,.playing-card.black-card .suit{color:#111}',
-    '.playing-card.kerri-card{border:2px solid var(--kerri-br)!important;background:#fff3f5;animation:kerri-pulse 1.5s ease-in-out infinite alternate}',
-    '.playing-card.kerri-card .rank,.playing-card.kerri-card .suit{color:#be123c;font-weight:900}',
-    '@keyframes kerri-pulse{from{box-shadow:0 0 0 2px rgba(244,63,94,.15)}to{box-shadow:0 0 0 5px rgba(244,63,94,.05)}}',
-    '.drawable-card{cursor:pointer;transition:transform .13s}',
-    '.drawable-card:hover{transform:translateY(-8px);box-shadow:var(--shadow-md)}',
-    '.log-area{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);padding:.9rem;margin-bottom:.85rem;box-shadow:var(--shadow-sm)}',
-    '.log-label{font-size:12px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px;font-weight:500}',
-    '.log-item{font-size:13px;color:var(--muted);padding:3px 0;border-bottom:.5px solid var(--border)}',
-    '.log-item:first-child{color:var(--text);font-weight:500}',
-    '.log-item:last-child{border:none}',
-    '.chat-area{background:var(--surface);border:.5px solid var(--border);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-sm)}',
-    '#chat-messages{max-height:130px;overflow-y:auto;padding:.7rem .9rem;display:flex;flex-direction:column;gap:3px}',
-    '.chat-msg{font-size:13px;color:var(--text);line-height:1.4}',
-    '.chat-msg .chat-sender{font-weight:600;color:var(--purple)}',
-    '.chat-msg.system{color:var(--hint);font-style:italic}',
-    '.chat-input-row{display:flex;border-top:.5px solid var(--border)}',
-    '.chat-input-row input{flex:1;border:none;border-radius:0;background:var(--surface);padding:10px 13px;font-size:14px}',
-    '.btn-send{padding:10px 15px;background:none;border:none;border-left:.5px solid var(--border);cursor:pointer;font-size:16px;color:var(--purple)}',
-    '.btn-send:hover{background:var(--purple-bg)}',
-    '.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:flex-end;justify-content:center;z-index:200;padding:.5rem}',
-    '@media(min-width:480px){.modal-overlay{align-items:center}}',
-    '.modal-box{background:var(--surface);border-radius:var(--r-xl) var(--r-xl) 0 0;padding:1.5rem 1.25rem 2rem;width:100%;max-width:520px;animation:slideUp .2s ease}',
-    '@media(min-width:480px){.modal-box{border-radius:var(--r-xl);padding:1.5rem}}',
-    '@keyframes slideUp{from{transform:translateY(40px);opacity:.6}to{transform:none;opacity:1}}',
-    '.modal-title{font-size:17px;font-weight:600;margin-bottom:4px}',
-    '.modal-subtitle{font-size:13px;color:var(--muted)}',
-    '.go-emoji{font-size:64px;text-align:center;margin-bottom:.5rem}',
-    '.go-loser{font-size:30px;font-weight:700;color:var(--red);text-align:center;margin-bottom:4px}',
-    '.go-sub{font-size:15px;color:var(--muted);text-align:center;margin-bottom:1.5rem}',
-    '.result-row{display:flex;justify-content:space-between;align-items:center;padding:7px 0;font-size:14px;border-bottom:.5px solid var(--border)}',
-    '.result-row:last-child{border:none}',
-    '.badge{font-size:12px;font-weight:500;padding:3px 10px;border-radius:99px}',
-    '.badge-kerri{background:var(--red-bg);color:var(--red)}',
-    '.badge-out{background:var(--green-bg);color:var(--green)}',
-    '.badge-safe{background:var(--blue-bg);color:var(--blue)}',
-    '#reconnect-banner{position:fixed;top:0;left:0;right:0;z-index:500;background:linear-gradient(90deg,#c8852a,#d4a843,#c8852a);color:#0f0f17;padding:10px 16px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;gap:10px}',
-    '.reconnect-inner{display:flex;align-items:center;gap:10px}',
-    '.reconnect-spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.3);border-top-color:white;border-radius:50%;animation:spin .8s linear infinite}',
-    '@keyframes spin{to{transform:rotate(360deg)}}',
-    '@media(max-width:400px){',
-    '  .room-code{font-size:36px;letter-spacing:6px}',
-    '  .playing-card{width:60px;height:86px}',
-    '  .playing-card .rank{font-size:15px}',
-    '  .card-back{width:32px;height:46px;font-size:13px}',
-    '}',
-    '*{-webkit-tap-highlight-color:transparent}',
-    'button,input{touch-action:manipulation}',
-        '/* TABLE LAYOUT - scoped */',
-    '#phase-game.phase.active{display:flex!important;flex-direction:column;width:100vw;height:100vh;overflow:hidden}',
-    '#phase-game .game-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;padding:0;max-width:none;margin:0;min-height:0}',
-    '#phase-game .game-topbar{flex-shrink:0;display:flex;gap:6px;padding:.5rem .75rem;align-items:center;background:rgba(15,15,23,.9)}',
-    '#phase-game #game-msg{margin:0;flex:1;padding:6px 12px;font-size:13px}',
-    '#phase-game .table-scene{flex:1;position:relative;display:flex;align-items:center;justify-content:center;overflow:visible;min-height:0}',
-    '#phase-game .table-felt{position:absolute;width:72.5vw;height:36.25vw;border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%);z-index:0;background:radial-gradient(ellipse at 50% 32%, rgba(255,255,255,.10) 0%, rgba(255,255,255,0) 55%),repeating-radial-gradient(circle at 50% 50%, rgba(0,0,0,.035) 0px, rgba(0,0,0,.035) 1px, transparent 1px, transparent 3px),radial-gradient(ellipse at 50% 45%, #1f6146 0%, #164a35 45%, #0f3126 75%, #0a2119 100%);box-shadow:0 0 0 4px var(--gold),inset 0 10px 34px rgba(255,255,255,.06),inset 0 -26px 60px rgba(0,0,0,.5)}',
-    '#phase-game .table-felt::before{content:\'\';position:absolute;inset:-44px;border-radius:50%;z-index:-2;background:radial-gradient(ellipse at 28% 18%, rgba(255,255,255,.09) 0%, rgba(255,255,255,0) 40%),repeating-linear-gradient(102deg, rgba(0,0,0,.22) 0px, rgba(0,0,0,.22) 2px, transparent 2px, transparent 7px),linear-gradient(135deg, #4a3323 0%, #3c2a1e 45%, #2a1d14 75%, #1c130c 100%);box-shadow:0 32px 60px rgba(0,0,0,.65),0 70px 130px rgba(0,0,0,.4),inset 0 2px 5px rgba(255,255,255,.07),inset 0 -8px 16px rgba(0,0,0,.55)}',
-    '#phase-game .table-felt::after{content:\'\';position:absolute;inset:-4px;border-radius:50%;z-index:-1;background:linear-gradient(135deg,#f0d78a 0%, var(--gold) 45%, #a97c1f 100%);box-shadow:inset 0 1px 2px rgba(255,255,255,.6),inset 0 -1px 3px rgba(0,0,0,.4)}',
-    '#phase-game .table-logo{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:34%;height:34%;opacity:.09;color:var(--gold)}',
-    '#phase-game .table-logo svg{width:100%;height:100%;fill:currentColor}',
-    '#phase-game #seats-area{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:63vw;height:31.5vw}',
-    '#phase-game .seat{position:absolute;display:flex;flex-direction:column;align-items:center;gap:4px}',
-    '#phase-game .seat-avatar{width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#3c2a1e,#2a1d14);border:2px solid rgba(212,168,67,.35);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:var(--gold);box-shadow:0 2px 8px rgba(0,0,0,.5)}',
-    '#phase-game .seat-avatar.active-seat{border-color:var(--gold);box-shadow:0 0 0 4px rgba(212,168,67,.3),0 2px 8px rgba(0,0,0,.5)}',
-    '#phase-game .seat-avatar.out-seat{opacity:.35}#phase-game .seat-avatar.disc-seat{opacity:.25;border-color:#e05555}',
-    '#phase-game .seat-name{font-size:9px;font-weight:600;color:#f0e6c8;text-shadow:0 1px 3px rgba(0,0,0,.9);white-space:nowrap;max-width:60px;overflow:hidden;text-overflow:ellipsis;text-align:center}',
-    '#phase-game .seat-cards{display:flex;align-items:flex-end;justify-content:center;height:44px;width:min(30vw,130px);flex-shrink:0;padding:4px 0 0;flex-wrap:nowrap;overflow:visible}',
-    '#phase-game .seat-card-back{position:relative;width:22px;height:32px;border-radius:4px;border:.5px solid rgba(212,168,67,.5);background:linear-gradient(135deg,#3c2a1e,#2a1d14);display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:var(--gold);transition:transform .18s;flex-shrink:0;margin-left:-2px}',
-    '#phase-game .seat-card-back.drawable-seat{cursor:pointer;border-color:var(--gold);color:var(--gold);animation:card-pick .9s ease-in-out infinite alternate}',
-    '#phase-game .seat-card-back.drawable-seat:hover{transform:translateY(-6px) scale(1.1) !important;box-shadow:0 6px 14px rgba(212,168,67,.6);border-color:#fff;z-index:99}',
-    '#phase-game .seat-card-back.disc-card{opacity:.2}',
-    '@keyframes card-pick{from{box-shadow:0 0 4px rgba(212,168,67,.3)}to{box-shadow:0 0 12px rgba(212,168,67,.7)}}',
-    '/* fly animation for drawn card */',
-    '.card-fly{position:fixed;pointer-events:none;z-index:9999;width:30px;height:42px;border-radius:4px;background:linear-gradient(135deg,#2d1f4e,#1e1535);border:.5px solid var(--gold);display:flex;align-items:center;justify-content:center;color:var(--gold);font-size:11px}',
-    '/* zoom-in overlay when tapping an opponent\'s hand */',
-    '#seat-zoom-backdrop{position:fixed;inset:0;background:rgba(5,8,12,.6);backdrop-filter:blur(2px);z-index:10000;opacity:0;transition:opacity .25s;}',
-    '#seat-zoom-backdrop.open{opacity:1}',
-    '#seat-zoom-stage{position:fixed;z-index:10001;display:flex;flex-direction:column;align-items:center;transition:top .38s cubic-bezier(.34,1.3,.4,1),left .38s cubic-bezier(.34,1.3,.4,1),width .38s cubic-bezier(.34,1.3,.4,1),height .38s cubic-bezier(.34,1.3,.4,1),transform .38s cubic-bezier(.34,1.3,.4,1)}',
-    '.seat-zoom-title{color:var(--gold);font-size:13px;font-weight:600;margin-bottom:12px;opacity:0;transition:opacity .25s .15s;text-align:center;white-space:nowrap;text-shadow:0 2px 6px rgba(0,0,0,.7)}',
-    '#seat-zoom-stage.open .seat-zoom-title{opacity:1}',
-    '.seat-zoom-row{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;max-width:92vw;transition:gap .38s cubic-bezier(.34,1.3,.4,1)}',
-    '#seat-zoom-stage.open .seat-zoom-row{gap:16px}',
-    '.seat-zoom-card{width:22px;height:32px;border-radius:5px;border:.5px solid rgba(212,168,67,.5);background:linear-gradient(135deg,#3c2a1e,#2a1d14);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--gold);cursor:pointer;flex-shrink:0;transition:width .38s cubic-bezier(.34,1.3,.4,1),height .38s cubic-bezier(.34,1.3,.4,1),font-size .38s,transform .15s,box-shadow .15s}',
-    '#seat-zoom-stage.open .seat-zoom-card{width:50px;height:72px;font-size:22px;box-shadow:0 6px 16px rgba(0,0,0,.5)}',
-    '.seat-zoom-card:hover,.seat-zoom-card:active{transform:translateY(-8px) scale(1.08) !important;box-shadow:0 10px 20px rgba(212,168,67,.55) !important;border-color:#fff}',
-    '@media(max-width:600px){#seat-zoom-stage.open .seat-zoom-card{width:38px;height:56px;font-size:18px}}',
-    '@media(max-width:600px){#seat-zoom-stage.open .seat-zoom-row{gap:8px}}',
-    '@media(min-width:601px){#phase-game .side-panels{position:absolute;top:48px;left:calc(50% + 28.5vw + 20px);display:flex;flex-direction:column;gap:6px;z-index:20;width:190px}}',
-    '@media(max-width:600px){#phase-game .side-panels{display:flex;flex-direction:row;gap:4px;padding:2px 6px;flex-shrink:0;width:100%;min-height:0}}',
-    '@media(max-width:600px){#phase-game .chat-area{flex:1;min-width:0}}',
-    '@media(max-width:600px){#phase-game .log-area{width:120px;flex-shrink:0}}',
-    '@media(max-width:600px){#phase-game #chat-messages{max-height:50px}}',
-    '@media(max-width:600px){#phase-game .side-panels{display:none}}',
-    '@media(max-width:600px){#phase-game .side-panels.open{display:flex;flex-direction:column;position:fixed;bottom:0;left:0;right:0;top:auto;height:52vh;z-index:50;background:#141414;padding:.6rem;border-radius:14px 14px 0 0;box-shadow:0 -8px 24px rgba(0,0,0,.6)}}',
-    '.chat-toggle-btn{display:none}',
-    '@media(max-width:600px){.chat-toggle-btn{display:flex;align-items:center;justify-content:center;position:fixed;right:14px;bottom:14px;width:48px;height:48px;border-radius:50%;background:var(--gold);color:#1a1204;font-size:22px;border:none;z-index:60;box-shadow:0 4px 14px rgba(0,0,0,.5)}}',
-    '@media(max-width:600px){#phase-game .chat-area{flex:1;min-width:0}}',
-    '@media(max-width:600px){#phase-game .log-area{width:140px;flex-shrink:0}}',
-    '@media(max-width:600px){#phase-game #chat-messages{max-height:60px}}',
-    '@media(max-width:600px){#phase-game .table-scene{flex:1;order:0;min-height:0}}',
-    '@media(max-width:600px){#phase-game .table-felt{width:103.5vw;height:51.75vw;max-width:none;max-height:none;top:42%}}',
-    '@media(max-width:600px){#phase-game .table-felt::before{inset:-26px}}',
-    '@media(max-width:600px){#phase-game .table-felt::after{inset:-3px}}',
-    '@media(max-width:600px){#phase-game #seats-area{width:90vw;height:45vw;top:42%}}',
-    '@media(min-width:601px) and (max-width:1024px) and (orientation:portrait){#phase-game .table-felt{width:98.9vw;height:49.45vw;top:42%}}',
-    '@media(min-width:601px) and (max-width:1024px) and (orientation:portrait){#phase-game #seats-area{width:86vw;height:43vw;top:42%}}',
-    '@media(max-width:600px){#phase-game .seat-cards{width:min(22vw,100px)}}',
-    '@media(max-width:600px){#phase-game .game-topbar{padding:.3rem .5rem;gap:4px;flex-wrap:nowrap;overflow:hidden}}',
-    '@media(max-width:600px){#phase-game #game-msg{font-size:11px;padding:4px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}',
-    '@media(max-width:600px){#phase-game .my-hand-bar{padding:.3rem .3rem .5rem;order:1}}',
-    '@media(max-width:600px){#phase-game .playing-card{width:64px;height:92px}}',
-    '@media(max-width:600px){#phase-game .playing-card .rank{font-size:15px}}',
-    '#phase-game .lb-panel{background:rgba(15,15,23,.92);border:1px solid rgba(212,168,67,.2);border-radius:var(--r-lg);padding:.6rem}',
-    '#phase-game .chat-area{background:rgba(15,15,23,.88);border:.5px solid var(--border-mid);border-radius:var(--r-lg);overflow:hidden}',
-    '#phase-game #chat-messages{max-height:90px;overflow-y:auto;padding:.4rem .6rem;display:flex;flex-direction:column;gap:2px}',
-    '#phase-game .chat-msg{font-size:11px;color:var(--text);line-height:1.3}',
-    '#phase-game .chat-msg .chat-sender{font-weight:600;color:var(--purple)}',
-    '#phase-game .chat-msg.system{color:var(--hint);font-style:italic}',
-    '#phase-game .chat-input-row{display:flex;border-top:.5px solid var(--border)}',
-    '#phase-game .chat-input-row input{flex:1;border:none;background:transparent;padding:6px 8px;font-size:11px;color:var(--text)}',
-    '#phase-game .btn-send{padding:6px 10px;background:none;border:none;border-left:.5px solid var(--border);cursor:pointer;font-size:13px;color:var(--purple)}',
-    '#phase-game .log-area{background:rgba(15,15,23,.88);border:.5px solid var(--border-mid);border-radius:var(--r-lg);padding:.5rem}',
-    '#phase-game .log-label{font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:.3px;font-weight:500}',
-    '#phase-game .log-item{font-size:10px;color:var(--muted);padding:1px 0;border-bottom:.5px solid var(--border)}',
-    '#phase-game .log-item:first-child{color:var(--text);font-weight:500}#phase-game .log-item:last-child{border:none}',
-    '#phase-game .my-hand-bar{flex-shrink:0;background:linear-gradient(180deg,rgba(10,10,20,0),rgba(10,10,20,.96) 25%);padding:.4rem .5rem .7rem;display:flex;flex-direction:column;gap:.3rem;align-items:center}',
-    '#phase-game .my-hand-top{display:flex;align-items:center;gap:10px;width:100%;flex-wrap:wrap;justify-content:center}',
-    '#phase-game .my-name-chip{font-size:12px;font-weight:700;color:var(--gold);background:rgba(212,168,67,.1);border:1px solid rgba(212,168,67,.25);border-radius:99px;padding:2px 10px}',
-    '#phase-game .my-hand-cards{display:flex;flex-wrap:nowrap;align-items:flex-end;justify-content:center;width:100%;max-width:100vw;padding:16px 8px 4px;position:relative;height:100px;overflow:visible}',
-    '#phase-game .playing-card{position:relative;transform-origin:bottom center;transition:transform .2s,box-shadow .2s;flex-shrink:0}',
-    '#phase-game .playing-card.selected-card{box-shadow:0 0 0 3px rgba(212,168,67,.7),0 -12px 20px rgba(212,168,67,.3)!important}',
-    '#phase-game .my-hand-cards::-webkit-scrollbar{display:none}',
-    '#phase-game .leave-game-btn{background:rgba(224,85,85,.1);border:.5px solid rgba(224,85,85,.25);color:var(--muted);border-radius:99px;padding:3px 12px;font-size:11px;cursor:pointer;font-family:inherit}',
-    '#phase-game .leave-game-btn:hover{background:rgba(224,85,85,.25);color:var(--red)}',
-    '.playing-card{cursor:pointer;transition:transform .15s,box-shadow .15s}',
-    '.playing-card.selected-card{border-color:var(--gold)!important;box-shadow:0 0 0 3px rgba(212,168,67,.5);transform:translateY(-8px)}',
-    '.playing-card.just-drawn{animation:newcard-pop .4s cubic-bezier(.34,1.56,.64,1)}',
-    '@keyframes newcard-pop{from{transform:scale(0) translateY(20px);opacity:0}to{transform:scale(1) translateY(0);opacity:1}}',
-    '/* ── REVEAL DRAWN CARD ── */',
-    '.reveal-overlay{position:fixed;inset:0;z-index:999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);animation:fadeInOv .15s ease}',
-    '@keyframes fadeInOv{from{opacity:0}to{opacity:1}}',
-    '.reveal-card-wrap{perspective:800px;animation:revealPop .3s cubic-bezier(.34,1.56,.64,1)}',
-    '@keyframes revealPop{from{transform:scale(.5);opacity:0}to{transform:scale(1);opacity:1}}',
-    '.reveal-card{width:90px;height:130px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;box-shadow:0 20px 60px rgba(0,0,0,.8),0 0 0 3px rgba(212,168,67,.4);animation:flipReveal .5s cubic-bezier(.4,0,.2,1) .1s both}',
-    '@keyframes flipReveal{0%{transform:rotateY(-180deg)}100%{transform:rotateY(0deg)}}',
-    '.reveal-card.normal{background:linear-gradient(145deg,#242436,#1a1a2e);border:.5px solid rgba(255,255,255,.15)}',
-    '.reveal-card.kerri{background:var(--kerri-bg);border:1.5px solid var(--kerri-br)}',
-    '.reveal-rank{font-size:36px;font-weight:800;line-height:1}',
-    '.reveal-suit{font-size:24px;line-height:1}',
-    '.reveal-card.red .reveal-rank,.reveal-card.red .reveal-suit{color:var(--red)}',
-    '.reveal-card.black .reveal-rank,.reveal-card.black .reveal-suit{color:#f0e6c8}',
-    '.reveal-card.kerri .reveal-rank,.reveal-card.kerri .reveal-suit{color:var(--kerri)}',
-    '.reveal-label{margin-top:12px;font-size:13px;color:#f0e6c8;font-weight:600;text-shadow:0 2px 8px rgba(0,0,0,.8)}',
-    '/* ── CLASSIC CARD LAYOUT ── */',
-    '.playing-card{flex-direction:column;justify-content:space-between;padding:3px 4px;cursor:pointer}',
-    '.card-corner{display:flex;flex-direction:column;align-items:center;line-height:1}',
-    '.card-corner .rank{font-size:16px;font-weight:800;font-family:Georgia,serif;line-height:1}',
-    '.card-corner .suit-sm{font-size:12px;line-height:1}',
-    '.card-br{transform:rotate(180deg)}',
-    '.card-center-suit{font-size:32px;line-height:1;text-align:center}',
-    '.playing-card.red-card .card-corner,.playing-card.red-card .card-center-suit{color:#cc0000}',
-    '.playing-card.black-card .card-corner,.playing-card.black-card .card-center-suit{color:#111}',
-    '.playing-card.kerri-card .card-corner,.playing-card.kerri-card .card-center-suit{color:#be123c}',
-    '.playing-card.selected-card{box-shadow:0 0 0 3px rgba(212,168,67,.8),0 4px 16px rgba(212,168,67,.4)!important}',
-    '.playing-card:hover:not(.selected-card){box-shadow:0 4px 12px rgba(0,0,0,.4);transform:translateY(-2px)}',
-    '#phase-game .seat-card-back{background:#2a1d14;border:.5px solid #6b4226;background-image:repeating-linear-gradient(45deg,rgba(212,168,67,.12) 0px,rgba(212,168,67,.12) 2px,transparent 2px,transparent 8px)}',
-    '#phase-game .seat-card-back.drawable-seat{background:#3c2a1e;border-color:var(--gold)}',
-    '  </style>',
-    '</head>',
-    '<body>',
-    '',
-    '<div id="phase-home" class="phase active">',
-    '  <div class="home-wrap">',
-    '    <div class="home-logo">\u2660</div>',
-    '    <h1>Kujt i ngec Kerri</h1>',
-    '    <p class="home-sub">Loja shqiptare me letra \u00b7 Multiplayer Online</p>',
-    '    <div class="card">',
-    '      <label class="section-label">Emri yt</label>',
-    '      <div class="username-row">',
-    '        <input type="text" id="home-name" placeholder="p.sh. Ardi" maxlength="20" autocomplete="off"/>',
-    '        <div class="username-avatar" id="home-avatar">?</div>',
-    '      </div>',
-    '    </div>',
-    '    <button class="btn btn-primary" onclick="goCreate()">\uff0b Krijo dhom\u00eb t\u00eb re</button>',
-    '    <div class="divider">ose</div>',
-    '    <div class="card">',
-    '      <label class="section-label">Bashkohu me kod</label>',
-    '      <div class="code-row">',
-    '        <input type="text" id="home-code" placeholder="p.sh. A3BX" maxlength="4" oninput="this.value=this.value.toUpperCase()" autocomplete="off"/>',
-    '        <button class="btn-join" onclick="goJoin()">Hyr \u2192</button>',
-    '      </div>',
-    '    </div>',
-    '    <div id="home-error" class="error-msg" style="display:none"></div>',
-    '  </div>',
-    '</div>',
-    '',
-    '<div id="phase-create" class="phase">',
-    '  <div class="home-wrap">',
-    '    <button class="btn-back" onclick="showPhase(\'home\')">\u2190 Kthehu</button>',
-    '    <h2>Krijo dhom\u00eb t\u00eb re</h2>',
-    '    <div class="card">',
-    '      <label class="section-label">Lloji i Kerrit</label>',
-    '      <div class="kerri-options">',
-    '        <label class="kerri-opt selected" data-val="joker">',
-    '          <input type="radio" name="kerri" value="joker" checked hidden/>',
-    '          <span class="ko-icon">\u2605</span><span class="ko-label">Xholi</span>',
-    '        </label>',
-    '        <label class="kerri-opt" data-val="queen">',
-    '          <input type="radio" name="kerri" value="queen" hidden/>',
-    '          <span class="ko-icon">\u2660Q</span><span class="ko-label">Mbret\u00ebresha</span>',
-    '        </label>',
-    '        <label class="kerri-opt" data-val="ace">',
-    '          <input type="radio" name="kerri" value="ace" hidden/>',
-    '          <span class="ko-icon">\u2665A</span><span class="ko-label">Asi</span>',
-    '        </label>',
-    '      </div>',
-    '    </div>',
-    '    <button class="btn btn-primary" onclick="createRoom()">Krijo dhe prit lojtar\u00ebt \u25b6</button>',
-    '    <div id="create-error" class="error-msg" style="display:none"></div>',
-    '  </div>',
-    '</div>',
-    '',
-    '<div id="phase-lobby" class="phase">',
-    '  <div class="game-wrap">',
-    '    <div class="lobby-hero">',
-    '      <div class="lobby-label">Kodi i dhom\u00ebs</div>',
-    '      <div class="room-code" id="lobby-code">----</div>',
-    '      <button class="btn-copy" onclick="copyCode()" id="copy-btn">\u29c9 Kopjo</button>',
-    '    </div>',
-    '    <div class="card">',
-    '      <div class="section-label">Lojtar\u00ebt (<span id="lobby-count">1</span>/6)</div>',
-    '      <div id="lobby-players"></div>',
-    '    </div>',
-    '    <div id="lobby-lb-wrap" style="display:none">',
-    '      <div class="card">',
-    '        <div class="section-label">🏆 Leaderboard</div>',
-    '        <div id="lobby-leaderboard"></div>',
-    '      </div>',
-    '    </div>',
-    '    <div id="lobby-host-area" style="display:none">',
-    '      <button class="btn btn-primary" id="start-btn" onclick="startGame()" disabled>Fillo loj\u00ebn \u25b6</button>',
-    '      <p class="lobby-hint center">Duhen t\u00eb pakt\u00ebn 2 lojtar\u00eb</p>',
-    '    </div>',
-    '    <div id="lobby-wait-area" style="display:none">',
-    '      <div class="msg-box warn">\u23f3 Duke pritur hostin...</div>',
-    '    </div>',
-    '    <button class="btn btn-secondary" onclick="leaveGame()" style="margin-top:1rem">Dil nga loja</button>',
-    '  </div>',
-    '</div>',
-    '',
-    '<div id="phase-game" class="phase">',
-    '  <div class="game-wrap">',
-    '    <div class="game-topbar">',
-    '      <div class="chip" id="chip-turn">\\u2014</div>',
-    '      <div class="chip" id="chip-room">\\u2014</div>',
-    '      <div id="game-msg" class="msg-box">Duke pritur...</div>',
-    '      <button class="chip chip-btn" onclick="toggleLeaderboard()" id="lb-toggle-btn">&#127942;</button>',
-    '    </div>',
-    '    <div class="table-scene">',
-    '      <div class="table-felt"><div class="table-logo"><svg viewBox="0 0 100 100"><path d="M50 10 L58 30 L80 26 L64 42 L86 50 L64 58 L80 74 L58 70 L50 90 L42 70 L20 74 L36 58 L14 50 L36 42 L20 26 L42 30 Z"/></svg></div></div>',
-    '      <div id="seats-area"></div>',
-    '      <div id="opponents-area" style="display:none"></div>',
-    '    </div>',
-    '    <button id="chat-toggle-btn" class="chat-toggle-btn" onclick="toggleChatPanel()">&#128172;</button>',
-    '    <div class="side-panels" id="side-panels">',
-    '      <div id="lb-panel" class="lb-panel" style="display:none"><div class="lb-title">&#127942; Leaderboard</div><div id="lb-content"></div></div>',
-    '      <div class="chat-area" style="flex:1"><div id="chat-messages"></div><div class="chat-input-row"><input type="text" id="chat-input" placeholder="Chat..." onkeydown="if(event.key===\'Enter\')sendChat()" maxlength="200"/><button class="btn-send" onclick="sendChat()">&#10148;</button></div></div>',
-    '    </div>',
-    '    <div class="my-hand-bar">',
-    '      <div class="my-hand-cards" id="my-hand"></div>',
-    '      <div class="my-hand-top"><span class="my-name-chip" id="my-name-chip">Ti</span><span class="hand-count" id="my-hand-count"></span><button class="leave-game-btn" onclick="leaveGame()">&#128682;</button></div>',
-    '    </div>',
-    '  </div>',
-    '</div>',
-    '',
-    '<div id="phase-gameover" class="phase">',
-    '  <div class="home-wrap">',
-    '    <div class="go-emoji" id="go-emoji">😱</div>',
-    '    <div class="go-loser" id="go-loser"></div>',
-    '    <div class="go-sub" id="go-sub"></div>',
-    '    <div class="card" style="margin-bottom:1rem">',
-    '      <div class="section-label">Rezultatet</div>',
-    '      <div id="go-results"></div>',
-    '    </div>',
-    '    <div class="card" id="go-lb-card" style="display:none">',
-    '      <div class="section-label">🏆 Leaderboard total</div>',
-    '      <div id="go-leaderboard"></div>',
-    '    </div>',
-    '    <div id="go-host-btns" style="display:none">',
-    '      <button class="btn btn-primary" onclick="playAgain()">Raundi tjet\u00ebr \u25b6</button>',
-    '    </div>',
-    '    <div id="go-wait-btns" style="display:none">',
-    '      <div class="msg-box warn">\u23f3 Duke pritur hostin...</div>',
-    '    </div>',
-    '    <button class="btn btn-secondary" onclick="leaveGame()">Dil nga loja</button>',
-    '  </div>',
-    '</div>',
-    '',
-    '<div id="draw-modal" class="modal-overlay" style="display:none" onclick="handleModalOutsideClick(event)">',
-    '  <div class="modal-box">',
-    '    <div class="modal-title" id="modal-title">Zgjedh nj\u00eb let\u00ebr</div>',
-    '    <div class="modal-subtitle">Klikoni nj\u00eb kart\u00eb p\u00ebr ta marr\u00eb!</div>',
-    '    <div class="cards-row" id="modal-cards" style="justify-content:center;margin:1rem 0;gap:8px"></div>',
-    '    <button class="btn btn-secondary" onclick="closeDrawModal()">Anulo</button>',
-    '  </div>',
-    '</div>',
-    '',
-    '<div id="reconnect-banner" style="display:none">',
-    '  <div class="reconnect-inner">',
-    '    <div class="reconnect-spinner"></div>',
-    '    <span>Duke u rilidhur...</span>',
-    '  </div>',
-    '</div>',
-    '',
-    '<script>',
-    'var socket=null,myId=null,myName="",roomCode=null,isHost=false,sessionToken=null;',
-    'var RED_SUITS={"\\u2665":true,"\\u2666":true};',
-    '',
-    'var AudioCtx=window.AudioContext||window.webkitAudioContext;',
-    'var audioCtx=null;',
-    'function getAC(){if(!audioCtx)audioCtx=new AudioCtx();return audioCtx;}',
-    'function playTone(freq,type,dur,vol,delay){',
-    '  vol=vol||0.15;delay=delay||0;',
-    '  try{var ctx=getAC(),osc=ctx.createOscillator(),g=ctx.createGain();',
-    '  osc.connect(g);g.connect(ctx.destination);osc.type=type;',
-    '  osc.frequency.setValueAtTime(freq,ctx.currentTime+delay);',
-    '  g.gain.setValueAtTime(vol,ctx.currentTime+delay);',
-    '  g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+delay+dur);',
-    '  osc.start(ctx.currentTime+delay);osc.stop(ctx.currentTime+delay+dur+.05);}catch(e){}}',
-    'var SFX={',
-    '  cardDraw:function(){playTone(440,"sine",.08,.15);playTone(520,"sine",.06,.10,.05);},',
-    '  myTurn:function(){playTone(660,"sine",.12,.20);playTone(880,"sine",.10,.15,.08);},',
-    '  win:function(){[523,659,784,1047].forEach(function(f,i){playTone(f,"sine",.2,.18,i*.1);});},',
-    '  lose:function(){[300,250,200].forEach(function(f,i){playTone(f,"sawtooth",.25,.18,i*.12);});},',
-    '  chat:function(){playTone(880,"sine",.07,.08);},',
-    '  join:function(){playTone(600,"sine",.10,.12);playTone(750,"sine",.08,.10,.07);},',
-    '  error:function(){playTone(300,"square",.15,.15);}',
-    '};',
-    '',
-    'function loadSavedUsername(){try{var s=localStorage.getItem("kerri_username");if(s){document.getElementById("home-name").value=s;updateAvatar(s);}}catch(e){}}',
-    'function saveUsername(n){try{localStorage.setItem("kerri_username",n);}catch(e){}updateAvatar(n);}',
-    'function updateAvatar(n){var a=document.getElementById("home-avatar");if(a&&n)a.textContent=n.charAt(0).toUpperCase();}',
-    '',
-    'function saveSession(){try{if(myId&&roomCode)localStorage.setItem("kerri_session",JSON.stringify({myId:myId,roomCode:roomCode,myName:myName,isHost:isHost,sessionToken:sessionToken}));}catch(e){}}',
-    'function clearSession(){try{localStorage.removeItem("kerri_session");}catch(e){}}',
-    'function getSavedSession(){try{return JSON.parse(localStorage.getItem("kerri_session"));}catch(e){return null;}}',
-    '',
-    'function connectSocket(cb){',
-    '  if(socket&&socket.connected){cb();return;}',
-    '  if(socket){socket.off();socket.disconnect();}',
-    '  socket=io({transports:["websocket","polling"]});',
-    '  var firstConnect=true;',
-    '  socket.on("connect",function(){',
-    '    if(firstConnect){firstConnect=false;cb();return;}',
-    '    var sess=getSavedSession();',
-    '    if(sess)socket.emit("reconnect_session",{playerId:sess.myId,roomCode:sess.roomCode,sessionToken:sess.sessionToken});',
-    '    else document.getElementById("reconnect-banner").style.display="none";',
-    '  });',
-    '  socket.on("disconnect",function(){document.getElementById("reconnect-banner").style.display="flex";});',
-    '  socket.on("joined",handleJoined);',
-    '  socket.on("reconnected",handleJoined);',
-    '  socket.on("reconnect_failed",function(){clearSession();myId=null;sessionToken=null;document.getElementById("reconnect-banner").style.display="none";showPhase("home");});',
-    '  socket.on("lobby_state",renderLobby);',
-    '  socket.on("game_state",renderGame);',
-    '  socket.on("card_revealed",showCardReveal);',
-    '  socket.on("game_over",renderGameOver);',
-    '  socket.on("chat",function(msg){appendChat(msg);if(!msg.system)SFX.chat();});',
-    '  socket.on("kicked",function(){clearSession();showPhase("home");showError("home-error","U hoqe nga dhoma.");});',
-    '  socket.on("error_msg",function(msg){showError("home-error",msg.message);showError("create-error",msg.message);document.getElementById("game-msg").textContent=msg.message;SFX.error();});',
-    '}',
-    'function sendMsg(type,data){if(socket&&socket.connected)socket.emit(type,data||{});}',
-    '',
-    'function handleJoined(msg){',
-    '  myId=msg.playerId;isHost=msg.isHost;roomCode=msg.roomCode;sessionToken=msg.sessionToken;',
-    '  document.getElementById("reconnect-banner").style.display="none";',
-    '  saveSession();showPhase("lobby");SFX.join();',
-    '}',
-    '',
-    'function goCreate(){',
-    '  var name=document.getElementById("home-name").value.trim();',
-    '  if(!name){showError("home-error","Shkruaj emrin tend!");SFX.error();return;}',
-    '  myName=name;saveUsername(name);hideError("home-error");showPhase("create");',
-    '}',
-    'function goJoin(){',
-    '  var name=document.getElementById("home-name").value.trim();',
-    '  var code=document.getElementById("home-code").value.trim().toUpperCase();',
-    '  if(!name){showError("home-error","Shkruaj emrin tend!");SFX.error();return;}',
-    '  if(code.length!==4){showError("home-error","Kodi duhet 4 karaktere!");SFX.error();return;}',
-    '  myName=name;saveUsername(name);hideError("home-error");',
-    '  connectSocket(function(){sendMsg("join_room",{name:myName,roomCode:code});});',
-    '}',
-    'function createRoom(){',
-    '  var el=document.querySelector("input[name=kerri]:checked");',
-    '  var kerriType=el?el.value:"joker";',
-    '  connectSocket(function(){sendMsg("create_room",{name:myName,kerriType:kerriType});});',
-    '}',
-    '',
-    'function renderLobby(msg){',
-    '  syncHost(msg.players);',
-    '  showPhase("lobby");',
-    '  document.getElementById("lobby-code").textContent=msg.roomCode;',
-    '  document.getElementById("lobby-count").textContent=msg.players.length;',
-    '  document.getElementById("lobby-players").innerHTML=msg.players.map(function(p){',
-    '    var isMe=p.id===myId;',
-    '    var kick=isHost&&!p.isHost&&!isMe',
-    '      ? "<button class=\\"kick-btn\\" onclick=\\"kickPlayer(\'"+escAttr(p.id)+"\')\\">\u0397iq</button>"',
-    '      : "";',
-    '    var meLabel=isMe?" <span style=\\"color:var(--hint);font-size:11px\\">(ti)</span>":"";',
-    '    var hostBadge=p.isHost?"<span class=\\"host-badge\\">Host</span>":"";',
-    '    var dot="<div class=\\"player-dot "+(p.disconnected?"offline":"")+"\\"></div>";',
-    '    return "<div class=\\"lobby-player-row\\">"+dot+"<div class=\\"player-name-col\\">"+escHtml(p.name)+meLabel+"</div>"+hostBadge+kick+"</div>";',
-    '  }).join("");',
-    '  if(msg.leaderboard&&msg.leaderboard.length>0){',
-    '    document.getElementById("lobby-lb-wrap").style.display="block";',
-    '    document.getElementById("lobby-leaderboard").innerHTML=renderLbRows(msg.leaderboard);',
-    '  }',
-    '  var ha=document.getElementById("lobby-host-area"),wa=document.getElementById("lobby-wait-area");',
-    '  if(isHost){ha.style.display="block";wa.style.display="none";document.getElementById("start-btn").disabled=msg.players.filter(function(p){return !p.disconnected;}).length<2;}',
-    '  else{ha.style.display="none";wa.style.display="block";}',
-    '}',
-    'function startGame(){sendMsg("start_game");}',
-    'function kickPlayer(id){sendMsg("kick_player",{targetId:id});}',
-    'function copyCode(){',
-    '  if(!navigator.clipboard){document.getElementById("copy-btn").textContent="Kodi: "+roomCode;return;}',
-    '  navigator.clipboard.writeText(document.getElementById("lobby-code").textContent).then(function(){',
-    '    var b=document.getElementById("copy-btn");b.innerHTML="\u2713 Kopjuar!";',
-    '    setTimeout(function(){b.innerHTML="\u29c9 Kopjo";},2000);',
-    '  }).catch(function(){document.getElementById("copy-btn").textContent="Kodi: "+roomCode;});',
-    '}',
-    '',
-    'var prevMyTurn=false;',
-    'var lastHandData=null;',
-    'function renderGame(state){',
-    '  syncHost(state.players);closeDrawModal();closeSeatZoom();',
-    '  showPhase("game");',
-    '  var ap=null;',
-    '  for(var i=0;i<state.players.length;i++){if(state.players[i].id===state.activePlayerId){ap=state.players[i];break;}}',
-    '  var isMT=state.isMyTurn;',
-    '  if(isMT&&!prevMyTurn)SFX.myTurn();',
-    '  prevMyTurn=isMT;',
-    '  var tc=document.getElementById("chip-turn");',
-    '  tc.textContent=isMT?"🎯 Radha jote!":"Radha e: "+(ap?ap.name:"\u2014");',
-    '  tc.className="chip"+(isMT?" my-turn":"");',
-    '  document.getElementById("chip-room").textContent="\u2660 "+state.roomCode;',
-    '  var nc=document.getElementById("my-name-chip");if(nc&&myName)nc.textContent=myName;',
-    '  renderMsg(state);renderSeats(state);',
-    '  var newHand=state.myHand;',
-    '  if(lastHandData&&lastHandData.length===newHand.length&&lastHandData.every(function(c){return newHand.some(function(n){return n.id===c.id;});})){',
-    '    renderMyHand(lastHandData);',
-    '  }else{',
-    '    lastHandData=newHand.slice();',
-    '    selectedCardIdx=null;',
-    '    renderMyHand(lastHandData);',
-    '  }',
-    '  var gl=document.getElementById(\"game-log\");if(gl)gl.innerHTML=(state.log||[]).map(function(l){return \"<div class=\'log-item\'>\"+escHtml(l)+\"</div>\";}).join(\"\");',
-    '  if(document.getElementById("lb-panel").style.display!=="none")renderLbPanel(state.leaderboard);',
-    '}',
-    'function renderMsg(state){',
-    '  var m=document.getElementById("game-msg");',
-    '  if(state.paused){m.className="msg-box warn";m.textContent="Lojë në pauzë: presim rilidhjen e lojtarit (deri 60 sekonda).";return;}',
-    '  var df=null;',
-    '  if(state.opponents){for(var i=0;i<state.opponents.length;i++){if(state.opponents[i].id===state.drawFromId){df=state.opponents[i];break;}}}',
-    '  if(!state.myHand||state.myHand.length===0){m.className="msg-box success";m.textContent="\u2705 Bravo! Ke dal\u00ebt!";}',
-    '  else if(state.isMyTurn&&df){m.className="msg-box";m.textContent="🎯 Radha jote! Kliko kartolat e \\""+df.name+"\\".";}',
-    '  else if(state.isMyTurn){m.className="msg-box success";m.textContent="\u2705 Prit radhën.";}',
-    '  else{var a=null;if(state.players){for(var i=0;i<state.players.length;i++){if(state.players[i].id===state.activePlayerId){a=state.players[i];break;}}}m.className="msg-box warn";m.textContent="\u23f3 "+(a?a.name:"\u2014")+" po luan...";}',
-    '}',
-    'function renderOpponents(state){',
-    '  var area=document.getElementById("opponents-area");area.innerHTML="";',
-    '  state.opponents.forEach(function(opp){',
-    '    var iD=state.isMyTurn&&opp.id===state.drawFromId&&opp.cardCount>0;',
-    '    var row=document.createElement("div");row.className="opp-row";',
-    '    var cards="";',
-    '    for(var i=0;i<opp.cardCount;i++){',
-    '      var cls="card-back "+(opp.disconnected?"disc":iD?"drawable":"not-my-turn");',
-    '      var clk=iD?" onclick=\\"openDrawModal(\'"+escAttr(opp.id)+"\',\'"+escAttr(opp.name)+"\',"+opp.cardCount+")\\"":" ";',
-    '      cards+="<div class=\\""+cls+"\\""+clk+">\u2660</div>";',
-    '    }',
-    '    var discTag=opp.disconnected?"<span class=\\"disc-tag\\">shk\u00ebputur</span>":"";',
-    '    var outBadge=opp.isOut?"<span class=\\"badge badge-out\\">\u2713</span>":"";',
-    '    row.innerHTML="<div class=\\"opp-info\\"><div class=\\"opp-name\\">"+escHtml(opp.name)+discTag+outBadge+"</div><div class=\\"opp-meta\\">"+opp.cardCount+" letra</div></div><div class=\\"opp-cards\\">"+cards+"</div>";',
-    '    area.appendChild(row);',
-    '  });',
-    '}',
-'function buildCard(card,i,cls,st){',
-    '  var h="<div class=\'"+ cls +"\' data-idx=\'"+ i +"\' onclick=\'cardTap("+ i +")\' style=\'"+ st +"\'>";',
-    '  h+="<div class=\'card-corner card-tl\'><div class=\'rank\'>"+card.rank+"</div><div class=\'suit-sm\'>"+card.suit+"</div></div>";',
-    '  h+="<div class=\'card-center-suit\'>"+card.suit+"</div>";',
-    '  h+="<div class=\'card-corner card-br\'><div class=\'rank\'>"+card.rank+"</div><div class=\'suit-sm\'>"+card.suit+"</div></div>";',
-    '  h+="</div>";return h;',
-    '}',
-    'var prevHandIds=[];',
-'var selectedCardIdx=null;',
-    'function renderMyHand(hand){',
-    '  var c=document.getElementById("my-hand"),cnt=document.getElementById("my-hand-count");',
-    '  if(!hand||hand.length===0){c.innerHTML="✓ Ke dalët";if(cnt)cnt.textContent="";prevHandIds=[];selectedCardIdx=null;return;}',
-    '  if(cnt)cnt.textContent=hand.length;',
-    '  var newIds=hand.map(function(c,i){return c.id+"-"+i;});',
-    '  var isNew=hand.length>prevHandIds.length;',
-    '  var n=hand.length;',
-    '  var maxAngle=Math.min(30,n*3);',
-    '  c.innerHTML=hand.map(function(card,i){',
-    '    var cls="playing-card"+(card.isKerri?" kerri-card":RED_SUITS[card.suit]?" red-card":" black-card");',
-    '    if(isNew&&i===hand.length-1)cls+=" just-drawn";',
-    '    if(i===selectedCardIdx)cls+=" selected-card";',
-    '    var angle=n>1?(i/(n-1)-0.5)*maxAngle:0;',
-    '    var lift=n>1?-Math.abs(angle)*0.8:0;',
-    '    var sel=i===selectedCardIdx?" translateY(-16px)":"";',
-    '    var cardStyle="transform:rotate("+angle+"deg) translateY("+lift+"px)"+sel+";transform-origin:bottom center";',
-    '    return buildCard(card,i,cls,cardStyle);',
-    '  }).join("");',
-    '  prevHandIds=newIds;',
-    '  requestAnimationFrame(function(){',
-    '    var cards=c.querySelectorAll(".playing-card");',
-    '    if(cards.length>1){',
-    '      var cw=cards[0].offsetWidth;',
-    '      var avail=c.clientWidth||(window.innerWidth-16);',
-    '      var totalNoOverlap=cw*cards.length;',
-    '      var overlap=0;',
-    '      if(totalNoOverlap>avail){',
-    '        overlap=(totalNoOverlap-avail)/(cards.length-1);',
-    '        var maxOverlap=cw*0.7;',
-    '        if(overlap>maxOverlap)overlap=maxOverlap;',
-    '      }',
-    '      for(var i=1;i<cards.length;i++){cards[i].style.marginLeft="-"+overlap+"px";}',
-    '    }',
-    '  });',
-    '}',
-'function cardTap(idx){',
-    '  if(selectedCardIdx===null){',
-    '    selectedCardIdx=idx;',
-    '    renderMyHand(lastHandData);',
-    '  }else if(selectedCardIdx===idx){',
-    '    selectedCardIdx=null;',
-    '    renderMyHand(lastHandData);',
-    '  }else{',
-    '    var hand=lastHandData;',
-    '    var fromI=selectedCardIdx,toI=idx;',
-    '    var moved=hand.splice(fromI,1)[0];',
-    '    hand.splice(toI,0,moved);',
-    '    selectedCardIdx=null;',
-    '    renderMyHand(hand);',
-    '    sendMsg("reorder_hand",{fromIdx:fromI,toIdx:toI});',
-    '  }',
-    '}',
-    'function openDrawModal(fId,fName,cnt){',
-    '  document.getElementById("modal-title").textContent="Dora e "+fName;',
-    '  var idx=[];for(var i=0;i<cnt;i++)idx.push(i);for(var i=idx.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=idx[i];idx[i]=idx[j];idx[j]=t;}',
-    '  var html="";',
-    '  for(var k=0;k<idx.length;k++){',
-    '    html+="<div class=\\"playing-card drawable-card black-card\\" onclick=\\"confirmDraw(\'"+escAttr(fId)+"\',"+idx[k]+")\\"><div class=\\"rank\\">\u2660</div><div class=\\"suit\\" style=\\"font-size:11px\\">"+(k+1)+"</div></div>";',
-    '  }',
-    '  document.getElementById("modal-cards").innerHTML=html;',
-    '  document.getElementById("draw-modal").style.display="flex";',
-    '}',
-    'function showCardReveal(data){',
-    '  var card=data.card;',
-    '  var isKerri=card.isKerri;',
-    '  var colorCls=isKerri?"kerri":RED_SUITS[card.suit]?"red":"black";',
-    '  var ov=document.createElement("div");ov.className="reveal-overlay";',
-    '  ov.innerHTML="<div class=\\"reveal-card-wrap\\"><div class=\\"reveal-card "+(isKerri?"kerri":"normal")+" "+colorCls+"\\"><div class=\\"reveal-rank\\">"+card.rank+"</div><div class=\\"reveal-suit\\">"+card.suit+"</div></div><div class=\\"reveal-label\\">"+escHtml(data.drawerName)+" mori nga "+escHtml(data.fromName)+"</div></div>";',
-    '  document.body.appendChild(ov);',
-    '  if(isKerri)SFX.lose();else SFX.cardDraw();',
-    '  setTimeout(function(){ov.remove();},1300);',
-    '}',
-    'function renderSeats(state){',
-    '  var area=document.getElementById("seats-area");if(!area)return;area.innerHTML="";',
-    '  var pos=[',
-    '    {t:"4%", l:"50%", x:"translateX(-50%)"},',
-    '    {t:"22%",l:"90%", x:"translate(-50%,-50%)"},',
-    '    {t:"80%",l:"90%", x:"translate(-50%,-50%)"},',
-    '    {t:"80%",l:"10%", x:"translate(-50%,-50%)"},',
-    '    {t:"22%",l:"10%", x:"translate(-50%,-50%)"},',
-    '  ];',
-    '  state.opponents.forEach(function(opp,si){',
-    '    var p=pos[si%pos.length];',
-    '    var iD=state.isMyTurn&&opp.id===state.drawFromId&&opp.cardCount>0;',
-    '    var av="seat-avatar"+(iD?" active-seat":opp.isOut?" out-seat":opp.disconnected?" disc-seat":"");',
-    '    var n=opp.cardCount;',
-    '    var cards="";',
-    '    for(var k=0;k<n;k++){',
-    '      var cc="seat-card-back"+(opp.disconnected?" disc-card":iD?" drawable-seat":"");',
-    '      cards+="<div class=\'"+ cc +"\'>&#9824;</div>";',
-    '    }',
-    '    var lbl=opp.isOut?"<span style=\'color:var(--green)\'>&#10003;</span>":"&#127136;"+n;',
-    '    var seat=document.createElement("div");seat.className="seat";seat.id="seat-"+escAttr(opp.id);',
-    '    seat.style.cssText="top:"+p.t+";left:"+p.l+";transform:"+p.x+";position:absolute";',
-    '    var scAttrs=iD?" data-id=\'"+escAttr(opp.id)+"\' data-name=\'"+escAttr(opp.name)+"\' data-count=\'"+n+"\' onclick=\'openSeatZoom(this)\' style=\'cursor:pointer\'":"";',
-    '    seat.innerHTML="<div class=\'"+ av +"\'>"+escHtml(opp.name.charAt(0).toUpperCase())+"</div><div class=\'seat-name\'>"+escHtml(opp.name)+"</div><div class=\'seat-cards\'"+scAttrs+">"+cards+"</div><div style=\'font-size:10px;color:var(--hint);text-align:center\'>"+lbl+"</div>";',
-    '    area.appendChild(seat);',
-    '  });',
-    '  requestAnimationFrame(function(){',
-    '    var groups=area.querySelectorAll(".seat-cards");',
-    '    groups.forEach(function(g){',
-    '      var kids=g.querySelectorAll(".seat-card-back");',
-    '      if(kids.length>1){',
-    '        var cw=kids[0].offsetWidth;',
-    '        var avail=g.clientWidth||70;',
-    '        var totalNoOverlap=cw*kids.length;',
-    '        var overlap=2;',
-    '        if(totalNoOverlap>avail){',
-    '          overlap=(totalNoOverlap-avail)/(kids.length-1);',
-    '          var maxOverlap=cw*0.82;',
-    '          if(overlap>maxOverlap)overlap=maxOverlap;',
-    '        }',
-    '        for(var i=1;i<kids.length;i++){kids[i].style.marginLeft="-"+overlap+"px";}',
-    '      }',
-    '    });',
-    '  });',
-    '}',
-    'function openSeatZoom(el){',
-    '  if(document.getElementById("seat-zoom-backdrop"))return;',
-    '  var fId=el.dataset.id,name=el.dataset.name,n=parseInt(el.dataset.count,10)||0;',
-    '  var rect=el.getBoundingClientRect();',
-    '  var backdrop=document.createElement("div");backdrop.id="seat-zoom-backdrop";backdrop.className="seat-zoom-backdrop";',
-    '  backdrop.onclick=function(e){if(e.target===backdrop)closeSeatZoom();};',
-    '  var stage=document.createElement("div");stage.id="seat-zoom-stage";stage.className="seat-zoom-stage";',
-    '  stage.style.top=rect.top+"px";stage.style.left=rect.left+"px";stage.style.width=rect.width+"px";stage.style.height=rect.height+"px";',
-    '  var html="<div class=\\"seat-zoom-title\\">"+escHtml(name)+" \\u2014 zgjidh nj\\u00eb kart\\u00eb</div><div class=\\"seat-zoom-row\\">";',
-    '  for(var k=0;k<n;k++){',
-    '    html+="<div class=\\"seat-zoom-card\\" data-idx=\\""+k+"\\">&#9824;</div>";',
-    '  }',
-    '  html+="</div>";',
-    '  stage.innerHTML=html;',
-    '  document.body.appendChild(backdrop);document.body.appendChild(stage);',
-    '  var cardEls=stage.querySelectorAll(".seat-zoom-card");',
-    '  cardEls.forEach(function(c){c.onclick=function(){pickZoomCard(fId,parseInt(c.dataset.idx,10),c);};});',
-    '  requestAnimationFrame(function(){requestAnimationFrame(function(){',
-    '    backdrop.classList.add("open");stage.classList.add("open");',
-    '    stage.style.top="38%";stage.style.left="50%";stage.style.width="auto";stage.style.height="auto";stage.style.transform="translate(-50%,-50%)";',
-    '  });});',
-    '}',
-    'function closeSeatZoom(){',
-    '  var backdrop=document.getElementById("seat-zoom-backdrop");',
-    '  var stage=document.getElementById("seat-zoom-stage");',
-    '  if(backdrop)backdrop.classList.remove("open");',
-    '  if(stage)stage.classList.remove("open");',
-    '  setTimeout(function(){if(backdrop)backdrop.remove();if(stage)stage.remove();},260);',
-    '}',
-    'function pickZoomCard(fId,k,el){',
-    '  var rect=el.getBoundingClientRect();',
-    '  var dest=document.getElementById("my-hand");',
-    '  var dr=dest?dest.getBoundingClientRect():{left:window.innerWidth/2,top:window.innerHeight-80,width:0,height:0};',
-    '  var fly=document.createElement("div");fly.className="card-fly";fly.textContent="\\u2660";',
-    '  fly.style.cssText="position:fixed;left:"+rect.left+"px;top:"+rect.top+"px;width:"+rect.width+"px;height:"+rect.height+"px;z-index:10002;pointer-events:none;border-radius:6px;background:linear-gradient(135deg,#2d1f4e,#1e1535);color:#9b72e8;display:flex;align-items:center;justify-content:center;font-size:18px;transition:transform .4s cubic-bezier(.4,0,.2,1),opacity .4s;";',
-    '  document.body.appendChild(fly);',
-    '  var dx=dr.left+dr.width/2-rect.left-rect.width/2;',
-    '  var dy=dr.top+dr.height/2-rect.top-rect.height/2;',
-    '  closeSeatZoom();',
-    '  requestAnimationFrame(function(){requestAnimationFrame(function(){fly.style.transform="translate("+dx+"px,"+dy+"px) scale(.7)";fly.style.opacity="0";});});',
-    '  setTimeout(function(){fly.remove();},450);',
-    '  sendMsg("draw_card",{fromPlayerId:fId,cardIndex:k});SFX.cardDraw();',
-    '}',
-    'function confirmDraw(fId,idx){sendMsg("draw_card",{fromPlayerId:fId,cardIndex:idx});SFX.cardDraw();closeDrawModal();}',
-    'function closeDrawModal(){document.getElementById("draw-modal").style.display="none";}',
-    'function handleModalOutsideClick(e){if(e.target===document.getElementById("draw-modal"))closeDrawModal();}',
-    '',
-    'function renderLbRows(lb){',
-    '  if(!lb||lb.length===0)return "<div style=\\"font-size:13px;color:var(--hint)\\">Ende nuk ka loj\u00ebra.</div>";',
-    '  var medals=["🥇","🥈","🥉"];',
-    '  var m=["gold","silver","bronze"];',
-    '  return lb.map(function(p,i){',
-    '    var rank=medals[i]||(i+1);',
-    '    return "<div class=\\"lb-row\\"><div class=\\"lb-rank "+(m[i]||"")+"\\">"+rank+"</div><div class=\\"lb-name\\">"+escHtml(p.name)+"</div><div class=\\"lb-stats\\"><span class=\\"lb-win\\">"+p.wins+"W</span><span class=\\"lb-loss\\">"+p.losses+"L</span></div></div>";',
-    '  }).join("");',
-    '}',
-    'function toggleLeaderboard(){',
-    '  var p=document.getElementById("lb-panel"),open=p.style.display==="none";',
-    '  p.style.display=open?"block":"none";',
-    '  if(open)document.getElementById("side-panels").classList.add("open");',
-    '  document.getElementById("lb-toggle-btn").textContent=open?"\u2715":"🏆";',
-    '}',
-    'function renderLbPanel(lb){document.getElementById("lb-content").innerHTML=renderLbRows(lb);}',
-    '',
-    'function renderGameOver(msg){',
-    '  syncHost(msg.players);closeDrawModal();closeSeatZoom();lastHandData=null;prevMyTurn=false;selectedCardIdx=null;',
-    '  showPhase("gameover");',
-    '  var isMe=msg.loserId===myId;',
-    '  document.getElementById("go-emoji").textContent=isMe?"😱":"🎉";',
-    '  document.getElementById("go-loser").textContent=msg.loserName;',
-    '  document.getElementById("go-sub").textContent=isMe?"Ty t\u00eb ngeci Kerri!":"I ngeci Kerri!";',
-    '  if(msg.forfeit)document.getElementById("go-sub").textContent="Humbi për shkak të shkëputjes.";',
-    '  if(isMe)SFX.lose();else SFX.win();',
-    '  document.getElementById("go-results").innerHTML=msg.results.map(function(r){',
-    '    var bc,bt;',
-    '    if(r.hasKerri){bc="badge-kerri";bt="\u2605 Kerri";}',
-    '    else if(r.cardCount===0){bc="badge-out";bt="\u2713 Doli";}',
-    '    else{bc="badge-safe";bt=r.cardCount+" letra";}',
-    '    return "<div class=\\"result-row\\"><span>"+escHtml(r.name)+"</span><span class=\\"badge "+bc+"\\">"+bt+"</span></div>";',
-    '  }).join("");',
-    '  var lbc=document.getElementById("go-lb-card");',
-    '  if(msg.leaderboard&&msg.leaderboard.length>0){lbc.style.display="block";document.getElementById("go-leaderboard").innerHTML=renderLbRows(msg.leaderboard);}',
-    '  else lbc.style.display="none";',
-    '  if(isHost){document.getElementById("go-host-btns").style.display="block";document.getElementById("go-wait-btns").style.display="none";}',
-    '  else{document.getElementById("go-host-btns").style.display="none";document.getElementById("go-wait-btns").style.display="block";}',
-    '}',
-    'function playAgain(){sendMsg("start_game");}',
-    'function leaveGame(){clearSession();try{if(socket){socket.off();socket.disconnect();}}catch(e){}setTimeout(function(){location.href=location.origin+location.pathname;},150);}',
-    '',
-    'function toggleChatPanel(){',
-    '  var sp=document.getElementById("side-panels");if(!sp)return;',
-    '  sp.classList.toggle("open");',
-    '}',
-    'function sendChat(){',
-    '  var inp=document.getElementById("chat-input"),text=inp.value.trim();',
-    '  if(!text)return;sendMsg("chat",{text:text});inp.value="";',
-    '}',
-    'function appendChat(msg){',
-    '  var area=document.getElementById("chat-messages");if(!area)return;',
-    '  var div=document.createElement("div");',
-    '  if(msg.system){div.className="chat-msg system";div.textContent=msg.text;}',
-    '  else{div.className="chat-msg";div.innerHTML="<span class=\\"chat-sender\\">"+escHtml(msg.sender)+":</span> "+escHtml(msg.text);}',
-    '  area.appendChild(div);while(area.children.length>100)area.removeChild(area.firstChild);area.scrollTop=area.scrollHeight;',
-    '}',
-    '',
-    'function showPhase(id){',
-    '  document.querySelectorAll(".phase").forEach(function(p){p.classList.remove("active");});',
-    '  var el=document.getElementById("phase-"+id);if(el)el.classList.add("active");',
-    '  window.scrollTo({top:0,behavior:"smooth"});',
-    '}',
-    'function showError(id,msg){var el=document.getElementById(id);if(!el)return;el.textContent=msg;el.style.display="block";}',
-    'function hideError(id){var el=document.getElementById(id);if(el)el.style.display="none";}',
-    'function escHtml(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}',
-    'function escAttr(s){return escHtml(s).replace(/\'/g,"&#39;");}',
-    'function syncHost(players){var me=(players||[]).find(function(p){return p.id===myId;});if(me){isHost=!!me.isHost;saveSession();}}',
-    '',
-    'document.addEventListener("DOMContentLoaded",function(){',
-    '  loadSavedUsername();',
-    '  var ni=document.getElementById("home-name");',
-    '  if(ni)ni.addEventListener("input",function(e){updateAvatar(e.target.value);});',
-    '  document.querySelectorAll(".kerri-opt").forEach(function(opt){',
-    '    opt.addEventListener("click",function(){',
-    '      document.querySelectorAll(".kerri-opt").forEach(function(o){o.classList.remove("selected");});',
-    '      opt.classList.add("selected");opt.querySelector("input").checked=true;',
-    '    });',
-    '  });',
-    '  try{',
-    '    var sess=getSavedSession();',
-    '    if(sess&&sess.myId&&sess.roomCode){',
-    '      myId=sess.myId;myName=sess.myName||"";isHost=sess.isHost||false;roomCode=sess.roomCode;',
-    '      document.getElementById("reconnect-banner").style.display="flex";',
-    '      connectSocket(function(){sendMsg("reconnect_session",{playerId:sess.myId,roomCode:sess.roomCode,sessionToken:sess.sessionToken});});',
-    '    }',
-    '  }catch(e){clearSession();}',
-    '});',
-    '<\/script>',
-    '</body>',
-    '</html>'
-  ].join('\n');
-}
-
-const HTML = buildHTML();
-
-
-app.get('*',(req,res)=>{res.setHeader('Content-Type','text/html; charset=utf-8');res.send(HTML);});
+const bearer = req => (req.headers.authorization||'').replace(/^Bearer /,'');
+function api(fn){return (req,res)=>{try{res.json(fn(req));}catch(error){
+  if(error.code?.startsWith('ERR_SQLITE')){console.error(JSON.stringify({event:'database_error',code:error.code}));return res.status(503).json({message:'Ruajtja nuk është e disponueshme. Provo përsëri.'});}
+  res.status(400).json({message:error.message});
+}};}
+app.get('/healthz',(req,res)=>res.json({ok:true}));
+app.get('/api/config',(req,res)=>res.json({analyticsEnabled:process.env.ANALYTICS_ENABLED==='true',protocol:2}));
+app.post('/api/profile',api(req=>{
+  if(!consumeLimit('profile:'+req.socket.remoteAddress,10,60000))throw Error('Prit pak përpara se të krijosh profil tjetër.');
+  return store.profile(req.body?.token,req.body?.name);
+}));
+app.get('/api/profile',api(req=>{const p=store.authenticate(bearer(req));if(!p)throw Error('Sesioni ka skaduar. Hyr përsëri.');return p;}));
+app.patch('/api/profile',api(req=>store.updateProfile(bearer(req),req.body)));
+app.get('/api/leaderboard',api(()=>store.leaderboard()));
+app.get('/api/social',api(req=>store.social(bearer(req))));
+app.post('/api/friends',api(req=>store.requestFriend(bearer(req),req.body?.friendCode)));
+app.post('/api/friends/accept',api(req=>store.acceptFriend(bearer(req),req.body?.profileId)));
+app.post('/api/invites',api(req=>{
+  const p=store.authenticate(bearer(req)),room=rooms[req.body?.roomCode];
+  if(!p||!room||room.phase!=='lobby'||!room.players.some(x=>x.profileId===p.id&&!x.disconnected))throw Error('Hyr në një dhomë për të ftuar miqtë.');
+  return store.inviteFriend(bearer(req),req.body?.profileId,room.code);
+}));
+app.post('/api/metrics',api(req=>{const p=store.authenticate(bearer(req));if(!p)throw Error('Hyr përsëri.');store.metric(p.id,req.body?.event);return {ok:true};}));
+app.get('/config.js',(req,res)=>res.type('js').send('window.KERRI_SERVER_URL="";'));
+app.get('/vendor/socket.io.min.js',(req,res)=>res.sendFile(path.join(__dirname,'node_modules/socket.io/client-dist/socket.io.min.js')));
+app.use(express.static(path.join(__dirname,'www'),{maxAge:0}));
+app.use((error,req,res,next)=>res.status(error.status||500).json({message:'Kërkesë e pavlefshme.'}));
 
 // ── Game Logic ────────────────────────────────────────────
 const rooms=Object.create(null),sessions=Object.create(null),socketToPlayer=Object.create(null);
+const limitBuckets=new Map();
+const SESSION_TTL=24*60*60*1000;
+function consumeLimit(key,max,windowMs){
+  const now=Date.now();let bucket=limitBuckets.get(key);
+  if(!bucket||now>=bucket.until){
+    if(limitBuckets.size>=10000){for(const [k,v] of limitBuckets)if(v.until<=now)limitBuckets.delete(k);if(limitBuckets.size>=10000)return false;}
+    bucket={n:0,until:now+windowMs};limitBuckets.set(key,bucket);
+  }
+  return ++bucket.n<=max;
+}
 function drawSource(room, pid) {
   const idx=room.players.findIndex(p=>p.id===pid);
   for(let d=1;d<room.players.length;d++) {
@@ -916,7 +111,7 @@ function buildDeck(t){
   SUITS.forEach(s=>RANKS.forEach(r=>{if(r===cfg.rank&&(s===cfg.suit||s===cfg.removedSuit))return;deck.push({rank:r,suit:s,isKerri:false,id:r+s});}));
   deck.push({rank:cfg.rank,suit:cfg.suit,isKerri:true,id:'KERRI'});return deck;
 }
-function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=randomInt(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;}
 function autoRemovePairs(hand){
   let changed=true;
   while(changed){changed=false;
@@ -924,27 +119,32 @@ function autoRemovePairs(hand){
       for(let j=i+1;j<hand.length;j++){if(!hand[j].isKerri&&hand[i].rank===hand[j].rank){hand.splice(j,1);hand.splice(i,1);changed=true;break;}}
       if(changed)break;}}
 }
-function makeRoomCode(){const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let code='';for(let i=0;i<4;i++)code+=c[Math.floor(Math.random()*c.length)];return rooms[code]?makeRoomCode():code;}
+function makeRoomCode(){const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';let code;do{code='';for(let i=0;i<4;i++)code+=c[randomInt(c.length)];}while(rooms[code]);return code;}
+function publicPlayer(p){return {id:p.id,name:p.name,isHost:p.isHost,ready:!!p.ready,isBot:!!p.isBot,avatar:p.avatar||'eagle',cardBack:p.cardBack||'classic',disconnected:!!p.disconnected};}
 function getLB(room){return Object.values(room.leaderboard||{}).sort((a,b)=>b.wins-a.wins||a.losses-b.losses);}
 function sendGameState(room){
   room.players.forEach(player=>{
+    if(player.isBot||player.disconnected)return;
     const opponents=room.players.filter(p=>p.id!==player.id).map(p=>({
-      id:p.id,name:p.name,cardCount:room.hands[p.id]?room.hands[p.id].length:0,
+      ...publicPlayer(p),cardCount:room.hands[p.id]?room.hands[p.id].length:0,
       isActive:room.activeIdx===room.players.findIndex(x=>x.id===p.id),
       isOut:room.hands[p.id]&&room.hands[p.id].length===0,disconnected:p.disconnected||false,
     }));
     const myHand=room.hands[player.id]||[],ap=room.players[room.activeIdx],isMT=ap&&ap.id===player.id;
     let drawFromId=null;
     if(isMT&&!paused(room)){const source=drawSource(room,player.id);drawFromId=source?source.id:null;}
-    io.to(player.socketId).emit('game_state',{phase:room.phase,myHand,opponents,paused:paused(room),activePlayerId:ap?ap.id:null,isMyTurn:isMT&&!paused(room),drawFromId,roomCode:room.code,players:room.players.map(p=>({id:p.id,name:p.name,isHost:p.isHost,disconnected:p.disconnected||false})),log:room.log.slice(0,8),leaderboard:getLB(room)});
+    io.to(player.socketId).emit('game_state',{phase:room.phase,myHand,opponents,paused:paused(room),activePlayerId:ap?ap.id:null,isMyTurn:isMT&&!paused(room),drawFromId,roomCode:room.code,players:room.players.map(publicPlayer),log:room.log.slice(0,8),leaderboard:getLB(room),roundId:room.roundId,turnVersion:room.turnVersion,handVersion:room.handVersions[player.id],sourceVersion:drawFromId?room.handVersions[drawFromId]:null,mode:room.mode});
   });
+  scheduleBot(room);
 }
-function sendLobbyState(room){io.to(room.code).emit('lobby_state',{roomCode:room.code,players:room.players.map(p=>({id:p.id,name:p.name,isHost:p.isHost,disconnected:p.disconnected||false})),phase:room.phase,leaderboard:getLB(room)});}
+function sendLobbyState(room){io.to(room.code).emit('lobby_state',{roomCode:room.code,players:room.players.map(publicPlayer),phase:room.phase,leaderboard:getLB(room),mode:room.mode,isPublic:room.isPublic});}
 function startGame(room){
+  clearTimeout(room.botTimer);room.botTimer=null;
+  room.roundId=uuidv4();room.turnVersion=0;room.handVersions={};room.actions=new Set();room.startedAt=Date.now();
   room.phase='playing';room.log=[];room.leaderboard=room.leaderboard||{};
   room.players.forEach(p=>{if(!room.leaderboard[p.id])room.leaderboard[p.id]={name:p.name,wins:0,losses:0,games:0};});
   const deck=shuffle(buildDeck(room.kerriType));room.hands={};
-  room.players.forEach(p=>room.hands[p.id]=[]);
+  room.players.forEach(p=>{room.hands[p.id]=[];room.handVersions[p.id]=0;store.metric(p.profileId,room.roundNumber?'rematch':'first_match');});
   deck.forEach((card,i)=>room.hands[room.players[i%room.players.length].id].push(card));
   room.players.forEach(p=>autoRemovePairs(room.hands[p.id]));
   room.activeIdx=room.players.findIndex(p=>room.hands[p.id].length>0);room.roundNumber=(room.roundNumber||0)+1;
@@ -959,8 +159,13 @@ function checkGameOver(room,forfeitId){
   if(!loserId&&alive.length===1)loserId=alive[0].id;
   const loserName=room.players.find(p=>p.id===loserId)?room.players.find(p=>p.id===loserId).name:'???';
   room.log.unshift(loserName+(forfeitId?' humbi nga shkëputja.':' i ngeci Kerri!'));
+  clearTimeout(room.botTimer);room.botTimer=null;
   room.players.forEach(p=>{if(!room.leaderboard[p.id])room.leaderboard[p.id]={name:p.name,wins:0,losses:0,games:0};room.leaderboard[p.id].games++;if(p.id===loserId)room.leaderboard[p.id].losses++;else room.leaderboard[p.id].wins++;});
-  room.result={loserId,loserName,forfeit:!!forfeitId,players:room.players.map(p=>({id:p.id,isHost:p.isHost})),results:room.players.map(p=>({id:p.id,name:p.name,hasKerri:p.id===loserId,cardCount:room.hands[p.id]?room.hands[p.id].length:0})),leaderboard:getLB(room)};
+  let persisted=false;
+  try{persisted=store.recordRound({id:room.roundId,roomCode:room.code,mode:room.mode||'online',startedAt:room.startedAt,endedAt:Date.now(),loserId,forfeit:!!forfeitId,players:room.players});}
+  catch(error){console.error(JSON.stringify({event:'round_save_failed',roundId:room.roundId,code:error.code||'storage'}));}
+  room.players.forEach(p=>store.metric(p.profileId,'match_complete'));
+  room.result={loserId,loserName,forfeit:!!forfeitId,roundId:room.roundId,persisted,mode:room.mode,players:room.players.map(publicPlayer),results:room.players.map(p=>({id:p.id,name:p.name,isBot:!!p.isBot,hasKerri:(room.hands[p.id]||[]).some(c=>c.isKerri),lost:p.id===loserId,cardCount:room.hands[p.id]?room.hands[p.id].length:0})),leaderboard:getLB(room)};
   io.to(room.code).emit('game_over',room.result);
   return true;
 }
@@ -973,47 +178,111 @@ function advanceTurn(room){
   sendGameState(room);
 }
 
+function performDraw(room,pid,source,index){
+  const player=room.players.find(p=>p.id===pid),hand=room.hands[pid];
+  const card=room.hands[source.id].splice(index,1)[0];hand.push(card);
+  const before=hand.length;autoRemovePairs(hand);const pairCount=(before-hand.length)/2;
+  room.handVersions[pid]++;room.handVersions[source.id]++;room.turnVersion++;
+  room.log.unshift(player.name+' mori një letër nga '+source.name+(pairCount?' dhe hoqi çift.':'.'));room.log.length=Math.min(room.log.length,50);
+  // Only the drawer learns the drawn card. Observers receive counts, never identity.
+  if(!player.isBot)io.to(player.socketId).emit('card_revealed',{drawerName:player.name,fromName:source.name,card,pairCount});
+  io.to(room.code).emit('card_drawn',{drawerId:pid,drawerName:player.name,fromName:source.name,pairCount,turnVersion:room.turnVersion});
+  if(!checkGameOver(room))advanceTurn(room);
+}
+function scheduleBot(room){
+  if(room.botTimer||room.phase!=='playing'||paused(room)||!room.players[room.activeIdx]?.isBot)return;
+  room.botTimer=setTimeout(()=>{
+    room.botTimer=null;
+    if(room.phase!=='playing'||paused(room))return;
+    const player=room.players[room.activeIdx],source=drawSource(room,player.id);
+    if(player.isBot&&source)performDraw(room,player.id,source,randomInt(room.hands[source.id].length));
+  },900);
+}
+function removePlayer(room,pid){
+  const player=room.players.find(p=>p.id===pid);if(!player)return;
+  clearTimeout(player.disconnectTimer);delete sessions[pid];delete socketToPlayer[player.socketId];
+  const socket=io.sockets.sockets.get(player.socketId);if(socket)socket.leave(room.code);
+  player.disconnected=true;
+  if(!room.players.some(p=>!p.disconnected&&!p.isBot)){
+    clearTimeout(room.botTimer);room.players.forEach(p=>{clearTimeout(p.disconnectTimer);delete sessions[p.id];});delete rooms[room.code];return;
+  }
+  const activeId=room.players[room.activeIdx]?.id;
+  updateHost(room);
+  if(room.phase==='playing'&&(room.hands[pid]||[]).length>0)checkGameOver(room,pid);
+  room.players=room.players.filter(p=>p.id!==pid);delete room.hands[pid];
+  if(room.phase==='playing'){room.activeIdx=room.players.findIndex(p=>p.id===activeId);sendGameState(room);}
+  else if(room.phase==='lobby')sendLobbyState(room);
+  else if(room.result)io.to(room.code).emit('game_over',{...room.result,players:room.players.map(publicPlayer)});
+}
+
 io.on('connection',socket=>{
+  if(!consumeLimit('connect:'+(socket.handshake?.address||socket.id),30,60000)){socket.disconnect(true);return;}
   const playerId=uuidv4();
   function resolveId(){const pid=socketToPlayer[socket.id];const sess=sessions[pid];const room=rooms[sess?sess.roomCode:null];return room&&room.players.some(p=>p.id===pid&&p.socketId===socket.id)?pid:null;}
-  function on(event,handler){socket.on(event,data=>{if(data===undefined)data={};if(!data||typeof data!=='object'||Array.isArray(data))return;handler(data);});}
-  function validName(name){return typeof name==='string'&&name.trim().length>0&&name.trim().length<=24;}
-  function joined(event,player,room){socket.emit(event,{playerId:player.id,roomCode:room.code,isHost:player.isHost,sessionToken:sessions[player.id].token});}
-  on('create_room',({name,kerriType})=>{
-    if(resolveId()||!validName(name))return;
-    name=name.trim();
-    const code=makeRoomCode(),room={code,phase:'lobby',kerriType:kerriType||'joker',players:[],hands:{},activeIdx:0,log:[],leaderboard:{},roundNumber:0};
-    rooms[code]=room;const player={id:playerId,name:name||'Lojtar 1',socketId:socket.id,isHost:true};
-    room.players.push(player);sessions[playerId]={name:player.name,roomCode:code,token:uuidv4()};
-    socketToPlayer[socket.id]=playerId;
-    socket.join(code);joined('joined',player,room);sendLobbyState(room);
-  });
-  on('join_room',({name,roomCode:code})=>{
-    if(resolveId()||!validName(name)||typeof code!=='string')return;
+  function error(message){socket.emit('error_msg',{message});}
+  function on(event,handler){socket.on(event,data=>{
+    if(!consumeLimit('events:'+socket.id,120,10000)){error('Shumë veprime. Prit pak.');return;}
+    const pid=resolveId(),sess=sessions[pid];
+    if(sess&&sess.expiresAt<=Date.now()){removePlayer(rooms[sess.roomCode],pid);error('Sesioni skadoi. Hyr përsëri.');return;}
+    if(data===undefined)data={};
+    if(!data||typeof data!=='object'||Array.isArray(data)){error('Mesazh i pavlefshëm.');return;}
+    try{handler(data);}catch(err){console.error(JSON.stringify({event:'socket_handler_error',type:event,code:err.code||'invalid_state'}));error('Veprimi nuk u krye. Provo përsëri.');}
+  });}
+  function validName(name){return typeof name==='string'&&name.trim().length>0&&name.trim().length<=20;}
+  function joined(event,player,room){socket.emit(event,{playerId:player.id,roomCode:room.code,isHost:player.isHost,sessionToken:sessions[player.id].token,expiresAt:sessions[player.id].expiresAt});}
+  function addPlayer(room,name,profile,isHost){
+    if(profile&&Object.values(rooms).some(r=>r.players.some(p=>p.profileId===profile.id))){error('Ky profil është në një dhomë. Rikthehu ose dil prej saj.');return false;}
+    const player={id:playerId,name:name.trim(),socketId:socket.id,isHost,ready:isHost,profileId:profile?.id,avatar:profile?.avatar,cardBack:profile?.cardBack};
+    room.players.push(player);sessions[playerId]={name:player.name,roomCode:room.code,token:uuidv4(),expiresAt:Date.now()+SESSION_TTL};
+    socketToPlayer[socket.id]=playerId;socket.join(room.code);joined('joined',player,room);return true;
+  }
+  function getProfile(token){const p=token?store.authenticate(token):null;if(token&&!p)throw Error('Invalid profile');return p;}
+  function createRoom({name,kerriType,profileToken},mode='online',isPublic=false){
+    if(resolveId())return;
+    if(!validName(name)){error('Shkruaj një emër me 1–20 karaktere.');return;}
+    if(Object.keys(rooms).length>=1000){error('Serveri është plot. Provo më vonë.');return;}
+    if(!consumeLimit('join:'+(socket.handshake?.address||socket.id),15,60000)){error('Shumë tentativa. Provo pas një minute.');return;}
+    const profile=getProfile(profileToken),code=makeRoomCode();
+    const room={code,mode,isPublic,createdAt:Date.now(),phase:'lobby',kerriType:Object.hasOwn(KERRI_CONFIGS,kerriType)?kerriType:'joker',players:[],hands:{},activeIdx:0,log:[],leaderboard:{},roundNumber:0};
+    if(!addPlayer(room,name,profile,true))return;
+    rooms[code]=room;
+    if(mode==='practice'){
+      for(let i=1;i<=2;i++)room.players.push({id:uuidv4(),name:'Bot '+i,isBot:true,ready:true,isHost:false});
+      startGame(room);
+    }else sendLobbyState(room);
+  }
+  on('create_room',data=>createRoom(data));
+  function joinRoom({name,roomCode:code,profileToken}){
+    if(resolveId()||!validName(name)||typeof code!=='string'){error('Kontrollo emrin dhe kodin.');return;}
+    if(!consumeLimit('join:'+(socket.handshake?.address||socket.id),15,60000)){error('Shumë tentativa. Provo pas një minute.');return;}
     name=name.trim();code=code.trim().toUpperCase();
     const room=rooms[code?code.toUpperCase():null];
     if(!room){socket.emit('error_msg',{message:'Dhoma nuk u gjet!'});return;}
     if(room.phase!=='lobby'){socket.emit('error_msg',{message:'Loja ka filluar!'});return;}
     if(room.players.length>=6){socket.emit('error_msg',{message:'Dhoma eshte plot!'});return;}
     if(room.players.some(p=>p.name.toLowerCase()===(name||'').toLowerCase())){socket.emit('error_msg',{message:'Ky emer eshte i zene!'});return;}
-    const player={id:playerId,name:name||'Lojtar '+(room.players.length+1),socketId:socket.id,isHost:false};
-    room.players.push(player);sessions[playerId]={name:player.name,roomCode:room.code,token:uuidv4()};
-    socketToPlayer[socket.id]=playerId;
-    socket.join(room.code);joined('joined',player,room);
-    room.log.push(player.name+' u bashkua.');sendLobbyState(room);
-    io.to(code).emit('chat',{text:player.name+' u bashkua!',system:true});
+    if(!addPlayer(room,name,getProfile(profileToken),false))return;
+    sendLobbyState(room);
+    io.to(code).emit('chat',{text:name+' u bashkua!',system:true});
+  }
+  on('join_room',joinRoom);
+  on('practice',data=>createRoom(data,'practice'));
+  on('quick_play',data=>{
+    if(resolveId())return;
+    const room=Object.values(rooms).find(r=>r.isPublic&&r.phase==='lobby'&&r.players.length<6&&!r.players.some(p=>p.name.toLowerCase()===String(data.name).trim().toLowerCase()));
+    if(room)joinRoom({...data,roomCode:room.code});else createRoom(data,'online',true);
   });
   on('reconnect_session',({playerId:pid,roomCode:code,sessionToken})=>{
     if(typeof pid!=='string'||typeof code!=='string'||(resolveId()&&resolveId()!==pid))return;
     const sess=sessions[pid];
-    if(!sess||typeof sessionToken!=='string'||sess.token!==sessionToken||sess.roomCode!==code){socket.emit('reconnect_failed');return;}
+    if(!consumeLimit('reconnect:'+(socket.handshake?.address||socket.id),20,60000)||!sess||sess.expiresAt<=Date.now()||typeof sessionToken!=='string'||sess.token!==sessionToken||sess.roomCode!==code){socket.emit('reconnect_failed');return;}
     const room=rooms[sess.roomCode];
     if(!room){socket.emit('reconnect_failed');return;}
     const player=room.players.find(p=>p.id===pid);
     if(!player){socket.emit('reconnect_failed');return;}
     const oldSocket=io.sockets.sockets.get(player.socketId);
     if(oldSocket&&oldSocket.id!==socket.id){delete socketToPlayer[oldSocket.id];oldSocket.disconnect(true);}
-    clearTimeout(player.disconnectTimer);player.socketId=socket.id;player.disconnected=false;
+    clearTimeout(player.disconnectTimer);player.socketId=socket.id;player.disconnected=false;sess.expiresAt=Date.now()+SESSION_TTL;
     socketToPlayer[socket.id]=pid;
     socket.join(room.code);
     joined('reconnected',player,room);
@@ -1021,39 +290,51 @@ io.on('connection',socket=>{
     else socket.emit('game_over',{...room.result,players:room.players.map(p=>({id:p.id,isHost:p.isHost}))});
     io.to(room.code).emit('chat',{text:player.name+' u rilidhë!',system:true});
   });
-  socket.on('start_game',()=>{
+  on('set_ready',({ready})=>{
+    const pid=resolveId(),room=rooms[sessions[pid]?.roomCode];if(!room||room.phase==='playing'||typeof ready!=='boolean')return;
+    room.players.find(p=>p.id===pid).ready=ready;sendLobbyState(room);
+    if(room.isPublic&&room.players.length>=2&&room.players.every(p=>p.ready&&!p.disconnected))startGame(room);
+  });
+  on('start_game',()=>{
     const pid=resolveId(),sess=sessions[pid],room=rooms[sess?sess.roomCode:null];if(!room||room.phase==='playing')return;
     const player=room.players.find(p=>p.id===pid);
     if(!player||!player.isHost){socket.emit('error_msg',{message:'Vetem hosti!'});return;}
     if(room.players.filter(p=>!p.disconnected).length<2){socket.emit('error_msg',{message:'Duhen 2+ lojtare online!'});return;}
+    if(room.players.some(p=>!p.disconnected&&!p.ready)){error('Prit derisa të gjithë të jenë gati.');return;}
     room.players=room.players.filter(p=>{if(!p.disconnected)return true;clearTimeout(p.disconnectTimer);delete sessions[p.id];return false;});
     startGame(room);
   });
-  on('draw_card',({fromPlayerId,cardIndex})=>{
+  function acceptAction(room,data,valid){
+    if(typeof data.actionId!=='string'||data.actionId.length<8||data.actionId.length>80||data.roundId!==room.roundId||room.actions.has(data.actionId)||!valid){
+      socket.emit('action_error',{message:'Gjendja ndryshoi. Zgjidh letrën përsëri.'});sendGameState(room);return false;
+    }
+    room.actions.add(data.actionId);if(room.actions.size>500)room.actions.delete(room.actions.values().next().value);return true;
+  }
+  on('draw_card',data=>{
+    const {fromPlayerId,cardIndex}=data;
     const pid=resolveId(),sess=sessions[pid],room=rooms[sess?sess.roomCode:null];if(!room||room.phase!=='playing')return;
     const ap=room.players[room.activeIdx];if(!ap||ap.id!==pid){socket.emit('error_msg',{message:'Nuk eshte radha jote!'});return;}
     if(paused(room))return;
     const fp=drawSource(room,pid);if(!fp||fp.id!==fromPlayerId)return;
     const fh=room.hands[fp.id];if(!fh||fh.length===0)return;
     if(!Number.isInteger(cardIndex)||cardIndex<0||cardIndex>=fh.length)return;
-    const card=fh.splice(cardIndex,1)[0];room.hands[pid].push(card);
-    room.log.unshift(ap.name+' mori "'+(card.isKerri?'★ KERRI':card.rank+card.suit)+'" nga '+fp.name);
-    room.log.length=Math.min(room.log.length,50);
-    io.to(room.code).emit('card_revealed',{drawerName:ap.name,fromName:fp.name,card:card});
-    autoRemovePairs(room.hands[pid]);
-    if(checkGameOver(room))return;
-    advanceTurn(room);
+    if(!acceptAction(room,data,data.turnVersion===room.turnVersion&&data.sourceVersion===room.handVersions[fp.id]))return;
+    performDraw(room,pid,fp,cardIndex);
   });
-  on('reorder_hand',({fromIdx,toIdx})=>{
+  on('reorder_hand',data=>{
+    const {fromIdx,toIdx}=data;
     const pid=resolveId(),sess=sessions[pid],room=rooms[sess?sess.roomCode:null];if(!room||room.phase!=='playing')return;
     const hand=room.hands[pid];if(!hand)return;
     if(!Number.isInteger(fromIdx)||!Number.isInteger(toIdx)||fromIdx<0||fromIdx>=hand.length||toIdx<0||toIdx>=hand.length)return;
+    if(!acceptAction(room,data,data.handVersion===room.handVersions[pid]))return;
     const moved=hand.splice(fromIdx,1)[0];
     hand.splice(toIdx,0,moved);
+    room.handVersions[pid]++;sendGameState(room);
   });
   on('chat',({text})=>{
     const pid=resolveId(),sess=sessions[pid],room=rooms[sess?sess.roomCode:null];if(!room||typeof text!=='string')return;
     const sender=room.players.find(p=>p.id===pid);
+    if(!consumeLimit('chat:'+pid,5,10000)){error('Prit pak përpara mesazhit tjetër.');return;}
     const t=String(text||'').slice(0,200);if(!t.trim())return;
     io.to(room.code).emit('chat',{text:t,sender:sender?sender.name:'?'});
   });
@@ -1061,11 +342,10 @@ io.on('connection',socket=>{
     const pid=resolveId(),sess=sessions[pid],room=rooms[sess?sess.roomCode:null];if(!room||room.phase!=='lobby')return;
     const host=room.players.find(p=>p.id===pid);if(!host||!host.isHost)return;
     const target=room.players.find(p=>p.id===targetId);if(!target||target.isHost)return;
-    io.to(target.socketId).emit('kicked');room.players=room.players.filter(p=>p.id!==targetId);
-    clearTimeout(target.disconnectTimer);delete sessions[targetId];delete socketToPlayer[target.socketId];
-    const targetSocket=io.sockets.sockets.get(target.socketId);if(targetSocket)targetSocket.leave(room.code);
-    sendLobbyState(room);
+    io.to(target.socketId).emit('kicked');removePlayer(room,targetId);
   });
+  on('leave_room',()=>{const pid=resolveId(),room=rooms[sessions[pid]?.roomCode];if(room)removePlayer(room,pid);socket.emit('left_room');});
+  on('resync_state',()=>{const room=rooms[sessions[resolveId()]?.roomCode];if(!room)return;if(room.phase==='playing')sendGameState(room);else if(room.phase==='lobby')sendLobbyState(room);else socket.emit('game_over',{...room.result,players:room.players.map(publicPlayer)});});
   socket.on('disconnect',()=>{
     const pid=resolveId();delete socketToPlayer[socket.id];
     const sess=sessions[pid];if(!sess||!sess.roomCode)return;
@@ -1081,21 +361,7 @@ io.on('connection',socket=>{
       else if(room.phase==='lobby')sendLobbyState(room);
       clearTimeout(player.disconnectTimer);
       player.disconnectTimer=setTimeout(()=>{
-        if(!player.disconnected)return;
-        if(!room.players.some(p=>!p.disconnected)){
-          room.players.forEach(p=>{clearTimeout(p.disconnectTimer);delete sessions[p.id];});
-          delete rooms[room.code];return;
-        }
-        const activeId=room.players[room.activeIdx]?.id;
-        if(room.phase==='playing'&&(room.hands[pid]||[]).length>0){
-          updateHost(room);checkGameOver(room,pid);
-        }
-        room.players=room.players.filter(p=>p.id!==pid);delete sessions[pid];delete room.hands[pid];
-        updateHost(room);
-        io.to(room.code).emit('chat',{text:player.name+' u largua.',system:true});
-        if(room.phase==='playing'){room.activeIdx=room.players.findIndex(p=>p.id===activeId);sendGameState(room);}
-        else if(room.phase==='lobby')sendLobbyState(room);
-        else if(room.result)io.to(room.code).emit('game_over',{...room.result,players:room.players.map(p=>({id:p.id,isHost:p.isHost}))});
+        if(player.disconnected)removePlayer(room,pid);
       },60000);
     }
   });

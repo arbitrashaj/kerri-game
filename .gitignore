@@ -1,4 +1,6 @@
 node_modules/
+data/
+artifacts/
 .idea/
 .env
 .env.*
